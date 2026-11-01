@@ -6,4 +6,4 @@ spring:
       username: user
       password: password
   application:
-    name: webtools-kanban-auth
+    name: webtools-auth
