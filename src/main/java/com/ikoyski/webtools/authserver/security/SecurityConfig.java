@@ -89,7 +89,7 @@ public class SecurityConfig {
                                                           GitHubOAuth2UserService githubOAuth2UserService) throws Exception {
         http
                 .authorizeHttpRequests(auth -> auth
-                        .requestMatchers("/actuator/health", "/error", "/login", "/login.html").permitAll()
+                        .requestMatchers("/actuator/health/**", "/actuator/prometheus", "/error", "/login", "/login.html").permitAll()
                         .anyRequest().authenticated())
                 .oauth2Login(login -> login
                         .loginPage("/login")
