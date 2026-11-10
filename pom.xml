@@ -122,6 +122,8 @@
         <version>4.9.10</version>
         <configuration>
           <generateGitPropertiesFile>true</generateGitPropertiesFile>
+          <!-- Render Docker builds do not include the .git directory. -->
+          <failOnNoGitDirectory>false</failOnNoGitDirectory>
         </configuration>
         <executions>
           <execution>
