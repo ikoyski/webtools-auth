@@ -49,15 +49,19 @@ class GeminiRedirectUriValidatorTest {
     }
 
     @Test
-    void rejectsUnexpectedResourceHostSuffixAndMalformedPaths() {
-        assertFalse(GeminiRedirectUriValidator.isValidRedirectUri(
-                "https://oauth-redirect.googleusercontent.com/r/user_bound_custom-mcp-123-other_server",
+    void acceptsCurrentGeminiCallbackWithoutResourceHostSuffix() {
+        assertTrue(GeminiRedirectUriValidator.isValidRedirectUri(
+                "https://oauth-redirect.googleusercontent.com/r/user_bound_custom-mcp-f40f6fbe3381a540caa331e7",
                 RESOURCE_HOST_SLUG));
+    }
+
+    @Test
+    void rejectsMalformedCallbackPaths() {
         assertFalse(GeminiRedirectUriValidator.isValidRedirectUri(
                 "https://oauth-redirect.googleusercontent.com/r/user_bound_custom-mcp-123-api_ikoyski_top/extra",
                 RESOURCE_HOST_SLUG));
         assertFalse(GeminiRedirectUriValidator.isValidRedirectUri(
-                "https://oauth-redirect.googleusercontent.com/r/user_bound_custom-mcp--api_ikoyski_top",
+                "https://oauth-redirect.googleusercontent.com/r/user_bound_custom-mcp-",
                 RESOURCE_HOST_SLUG));
     }
 
