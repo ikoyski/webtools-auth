@@ -55,7 +55,7 @@ public final class GeminiRedirectUriValidator {
                 return false;
             }
             String pathPattern = Pattern.quote(CALLBACK_PREFIX)
-                    + "[A-Za-z0-9_-]{1,256}-" + Pattern.quote(expectedResourceHostSlug);
+                    + "[A-Za-z0-9_-]{1,256}";
             return Pattern.matches(pathPattern, uri.getRawPath());
         } catch (URISyntaxException ex) {
             return false;
