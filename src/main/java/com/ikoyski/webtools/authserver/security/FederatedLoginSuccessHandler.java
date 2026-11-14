@@ -64,7 +64,8 @@ public class FederatedLoginSuccessHandler implements AuthenticationSuccessHandle
                     token.getAuthorizedClientRegistrationId(), token.getPrincipal());
             result = identities.federated(identity);
         } catch (IllegalArgumentException e) {
-            log.warn("Sign-in rejected: {}", e.getMessage());
+            log.warn("federated_sign_in_rejected provider={} reason=unsupported_identity",
+                    token.getAuthorizedClientRegistrationId());
             reject(request, response, 403, "This sign-in method is not enabled.");
             return;
         } catch (RuntimeException e) {
@@ -73,15 +74,31 @@ public class FederatedLoginSuccessHandler implements AuthenticationSuccessHandle
             return;
         }
 
+        String provider = token.getAuthorizedClientRegistrationId();
         switch (result.status()) {
-            case OK -> signIn(request, response, result.identity());
-            case INVALID -> reject(request, response, 400, "The identity provider returned an incomplete profile. Please try again.");
-            case EMAIL_NOT_VERIFIED -> reject(request, response, 403,
-                    "Your account's email address has not been verified, so it cannot be used to sign in.");
-            case EMAIL_IN_USE -> reject(request, response, 409,
-                    "This verified email is already associated with another sign-in identity. "
-                            + "Account linking must be completed from an authenticated session.");
-            case REJECTED -> reject(request, response, 403, "This account cannot be used to sign in.");
+            case OK -> {
+                log.info("federated_sign_in_succeeded provider={}", provider);
+                signIn(request, response, result.identity());
+            }
+            case INVALID -> {
+                log.warn("federated_sign_in_rejected provider={} reason=invalid_profile", provider);
+                reject(request, response, 400, "The identity provider returned an incomplete profile. Please try again.");
+            }
+            case EMAIL_NOT_VERIFIED -> {
+                log.warn("federated_sign_in_rejected provider={} reason=email_not_verified", provider);
+                reject(request, response, 403,
+                        "Your account's email address has not been verified, so it cannot be used to sign in.");
+            }
+            case EMAIL_IN_USE -> {
+                log.warn("federated_sign_in_rejected provider={} reason=email_already_linked", provider);
+                reject(request, response, 409,
+                        "This verified email is already associated with another sign-in identity. "
+                                + "Account linking must be completed from an authenticated session.");
+            }
+            case REJECTED -> {
+                log.warn("federated_sign_in_rejected provider={} reason=provider_rejected", provider);
+                reject(request, response, 403, "This account cannot be used to sign in.");
+            }
         }
     }
 
