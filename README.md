@@ -73,7 +73,7 @@ Optional ChatGPT is seeded only when its client ID and at least one redirect URI
 
 ## Config Server properties
 
-The identity server expects its issuer, database, federated-provider credentials, signing-key paths and OAuth client registrations to be supplied through external configuration. MCP Dynamic Client Registration is controlled by `auth.mcp.client-registration.enabled` and defaults to disabled.
+The identity server expects its issuer, database, federated-provider credentials, signing-key paths and OAuth client registrations to be supplied through external configuration. MCP Dynamic Client Registration is controlled by `auth.mcp.client-registration.enabled` and defaults to disabled. Render test loads the enablement flag from the Config Server's `webtools-auth-mcp.yaml` profile overlay; do not activate that overlay in production without explicit promotion.
 
 For GitHub sign-in, the Config Server provides the `spring.security.oauth2.client.registration.github` properties (`client-id`, `client-secret`, and scopes `read:user`, `user:email`). Keep the OAuth App secret in the private configuration/secret store, not in the frontend repository.
 
