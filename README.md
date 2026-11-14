@@ -92,6 +92,9 @@ auth:
     mcp:
       resource: https://api.ikoyski.top/kanban-mcp/mcp
       backend-resource: https://api.ikoyski.top/kanban-backend
+      # DCR enablement is set by a separate environment-specific Config Server profile overlay.
+      client-registration:
+        enabled: false
     claude:
       # Existing Claude client configuration
     chatgpt:
