@@ -26,10 +26,18 @@ Current client types include:
 - Claude MCP client.
 - Optional ChatGPT MCP client.
 - Optional Gemini MCP client.
+- Grok and Cursor MCP clients, created through the restricted Dynamic Client Registration endpoint when enabled.
 - Kanban browser/web client.
 - Additional first-party browser applications configured under `auth.clients.applications`.
 
-ChatGPT registration is optional and requires a client ID plus at least one exact redirect URI. Gemini registration is optional and requires a client ID plus the configured MCP resource; its redirect URI list may be empty because Gemini generates a per-user callback. PKCE is required for both. A configured client secret makes the client confidential and enables client authentication; public clients use no client authentication and do not receive refresh-token grants. Keep provider-specific behavior aligned with the actual integration product.
+ChatGPT registration is optional and requires a client ID plus at least one exact redirect URI. Gemini registration is optional and requires a client ID plus the configured MCP resource; its redirect URI list may be empty because Gemini generates a per-user callback. PKCE is required for both. A configured client secret makes the client confidential and enables client authentication.
+ 
+Grok and Cursor use the restricted DCR endpoint at `/oauth2/register`, advertised through authorization-server metadata only when `auth.mcp.client-registration.enabled=true`. It is disabled by default and currently enabled only in Render test configuration. Accept only public Authorization Code clients with PKCE and exact callbacks:
+- Grok: `https://grok.com/connectors-oauth-exchange-code/`
+- Cursor web: `https://www.cursor.com/agents/mcp/oauth/callback`
+- Cursor desktop: `http://localhost:8787/callback`
+
+Reject client secrets, other redirect URIs, non-code response types, unsupported grants and scopes outside `kanban.read`, `kanban.write`, and optional `offline_access`. DCR-created clients must receive both the configured MCP resource and backing Kanban API resource audiences. Do not enable open registration in production without explicit approval and a completed end-to-end review.
 
 ## Federated identity providers
 
