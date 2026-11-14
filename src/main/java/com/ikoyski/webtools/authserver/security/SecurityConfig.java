@@ -45,6 +45,13 @@ public class SecurityConfig {
         OAuth2AuthorizationServerConfigurer authorizationServerConfigurer =
                 http.getConfigurer(OAuth2AuthorizationServerConfigurer.class);
         authorizationServerConfigurer.oidc(Customizer.withDefaults());
+        if (mcpClientRegistrationEnabled) {
+            authorizationServerConfigurer.authorizationServerMetadataEndpoint(endpoint ->
+                    endpoint.authorizationServerMetadataCustomizer(metadata -> {
+                        metadata.claim("registration_endpoint", issuer + "/oauth2/register");
+                        metadata.claim("scopes_supported", List.of("kanban.read", "kanban.write", "offline_access"));
+                    }));
+        }
         authorizationServerConfigurer.authorizationEndpoint(endpoint ->
                 endpoint.authenticationProviders(configureAuthorizationCodeValidator(geminiRedirectUriValidator)));
 
@@ -89,8 +96,9 @@ public class SecurityConfig {
                                                           LogoutRedirectHandler logoutHandler,
                                                           GitHubOAuth2UserService githubOAuth2UserService) throws Exception {
         http
+                .csrf(csrf -> csrf.ignoringRequestMatchers(new AntPathRequestMatcher("/oauth2/register", "POST")))
                 .authorizeHttpRequests(auth -> auth
-                        .requestMatchers("/actuator/health/**", "/actuator/prometheus", "/error", "/login", "/login.html").permitAll()
+                        .requestMatchers("/actuator/health/**", "/actuator/prometheus", "/error", "/login", "/login.html", "/oauth2/register").permitAll()
                         .anyRequest().authenticated())
                 .oauth2Login(login -> login
                         .loginPage("/login")
