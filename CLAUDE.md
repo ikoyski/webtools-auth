@@ -32,7 +32,7 @@ Current client types include:
 
 ChatGPT registration is optional and requires a client ID plus at least one exact redirect URI. Gemini registration is optional and requires a client ID plus the configured MCP resource; its redirect URI list may be empty because Gemini generates a per-user callback. PKCE is required for both. A configured client secret makes the client confidential and enables client authentication.
  
-Grok and Cursor use the restricted DCR endpoint at `/oauth2/register`, advertised through authorization-server metadata only when `auth.mcp.client-registration.enabled=true`. It is disabled by default and currently enabled only in Render test configuration. Accept only public Authorization Code clients with PKCE and exact callbacks:
+Grok and Cursor use the restricted DCR endpoint at `/oauth2/register`, advertised through authorization-server metadata only when `auth.mcp.client-registration.enabled=true`. It is disabled by default and currently enabled only in Render test through the Config Server's `webtools-auth-mcp.yaml` overlay and the Render-only `public,mcp` profiles. Keep the homelab/private deployment disabled until explicitly promoted. Accept only public Authorization Code clients with PKCE and exact callbacks:
 - Grok: `https://grok.com/connectors-oauth-exchange-code/`
 - Cursor web: `https://www.cursor.com/agents/mcp/oauth/callback`
 - Cursor desktop: `http://localhost:8787/callback`
