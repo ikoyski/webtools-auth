@@ -74,7 +74,8 @@ This is a fixed per-client resource binding, not dynamic RFC 8707 resource-indic
 
 ## Important implementation areas
 
-- `ClientSeeder` — config-driven client creation/update, public/confidential client behavior, MCP resource binding and the Gemini dynamic-redirect client marker.
+- `ClientSeeder` — config-driven pre-registered client creation/update, public/confidential client behavior, MCP resource binding and the Gemini dynamic-redirect client marker.
+- `McpClientRegistrationController` — restricted RFC 7591 registration for Grok/Cursor; disabled by default and enabled only through the Render test Config Server profile overlay.
 - `GeminiRedirectUriValidator` — strict validation of Gemini's user-bound callback against the configured MCP resource host.
 - `AuthorizationServerConfig` — authorization server components, OIDC ID-token claims and JWT access-token customization.
 - `FederatedLoginSuccessHandler` — federated login completion and central identity resolution.
