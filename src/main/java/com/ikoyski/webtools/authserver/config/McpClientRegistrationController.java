@@ -45,19 +45,16 @@ public class McpClientRegistrationController {
 
     private final RegisteredClientRepository clients;
     private final boolean enabled;
-    private final String issuer;
     private final String mcpResource;
     private final String mcpBackendResource;
 
     public McpClientRegistrationController(
             RegisteredClientRepository clients,
             @Value("${auth.mcp.client-registration.enabled:false}") boolean enabled,
-            @Value("${auth.issuer}") String issuer,
             @Value("${auth.client.mcp.resource:}") String mcpResource,
             @Value("${auth.client.mcp.backend-resource:${auth.client.web.resource-uri:}}") String mcpBackendResource) {
         this.clients = clients;
         this.enabled = enabled;
-        this.issuer = issuer;
         this.mcpResource = mcpResource == null ? "" : mcpResource.trim();
         this.mcpBackendResource = mcpBackendResource == null ? "" : mcpBackendResource.trim();
     }
