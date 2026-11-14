@@ -8,7 +8,6 @@ import static org.junit.jupiter.api.Assertions.assertTrue;
 import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.Mockito.never;
 import static org.mockito.Mockito.verify;
-import static org.mockito.Mockito.when;
 
 import java.util.List;
 import java.util.Map;
@@ -141,6 +140,6 @@ class McpClientRegistrationControllerTest {
 
     private McpClientRegistrationController controller(boolean enabled) {
         return new McpClientRegistrationController(
-                clients, enabled, "https://auth.example.test", MCP_RESOURCE, BACKEND_RESOURCE);
+                clients, enabled, MCP_RESOURCE, BACKEND_RESOURCE);
     }
 }
