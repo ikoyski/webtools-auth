@@ -31,15 +31,17 @@ public class SecurityConfig {
     /**
      * Protocol endpoints: /oauth2/authorize, /oauth2/token, /oauth2/jwks,
      * /.well-known/oauth-authorization-server, etc. Browsers that are not signed in are sent
-     * to /login. OIDC is enabled for standardized identity tokens and UserInfo; dynamic client registration remains disabled, so there is
-     * no open registration endpoint; clients are pre-registered (see ClientSeeder).
+     * to /login. OIDC is enabled for standardized identity tokens and UserInfo. Restricted MCP client registration
+     * is advertised only when explicitly enabled for an approved environment.
      * CORS is enabled so a browser app can call the token endpoint (see CorsConfig).
      */
     @Bean
     @Order(1)
     @SuppressWarnings("deprecation") // applyDefaultSecurity is deprecated since 1.4 but still supported
     public SecurityFilterChain authorizationServerSecurityFilterChain(
-            HttpSecurity http, GeminiRedirectUriValidator geminiRedirectUriValidator) throws Exception {
+            HttpSecurity http, GeminiRedirectUriValidator geminiRedirectUriValidator,
+            @org.springframework.beans.factory.annotation.Value("${auth.mcp.client-registration.enabled:false}") boolean mcpClientRegistrationEnabled,
+            @org.springframework.beans.factory.annotation.Value("${auth.issuer}") String issuer) throws Exception {
         OAuth2AuthorizationServerConfiguration.applyDefaultSecurity(http);
 
         OAuth2AuthorizationServerConfigurer authorizationServerConfigurer =
