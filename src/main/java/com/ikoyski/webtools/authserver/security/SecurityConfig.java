@@ -85,6 +85,7 @@ public class SecurityConfig {
     @Order(2)
     public SecurityFilterChain defaultSecurityFilterChain(HttpSecurity http,
                                                           FederatedLoginSuccessHandler successHandler,
+                                                          FederatedLoginFailureHandler failureHandler,
                                                           LogoutRedirectHandler logoutHandler,
                                                           GitHubOAuth2UserService githubOAuth2UserService) throws Exception {
         http
@@ -94,7 +95,8 @@ public class SecurityConfig {
                 .oauth2Login(login -> login
                         .loginPage("/login")
                         .userInfoEndpoint(userInfo -> userInfo.userService(githubOAuth2UserService))
-                        .successHandler(successHandler))
+                        .successHandler(successHandler)
+                        .failureHandler(failureHandler))
                 // GET /logout?redirect=<allow-listed url> ends this server's sign-in session, so "sign out" in an
                 // app really signs the person out instead of silently signing them back in.
                 .logout(logout -> logout
