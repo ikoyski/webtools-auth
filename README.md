@@ -55,6 +55,8 @@ Clients are seeded/upserted by `ClientSeeder` at application startup from Config
 | Claude | MCP access | Configurable public or confidential client; PKCE |
 | ChatGPT | MCP access | Optional; PKCE; public without a secret, confidential with a secret |
 | Gemini | MCP access | Optional; PKCE; public without a secret, confidential with a secret |
+| Grok | MCP access | Dynamic public client registration; PKCE; exact callback allow-list |
+| Cursor | MCP access | Dynamic public client registration; PKCE; exact web/desktop callback allow-list |
 | Kanban web | Browser application | Public OIDC client with PKCE |
 | Additional first-party apps | Configured browser applications | One public OIDC client per app, PKCE and app-specific API audience |
 
@@ -71,7 +73,7 @@ Optional ChatGPT is seeded only when its client ID and at least one redirect URI
 
 ## Config Server properties
 
-The identity server expects its issuer, database, federated-provider credentials, signing-key paths and OAuth client registrations to be supplied through external configuration.
+The identity server expects its issuer, database, federated-provider credentials, signing-key paths and OAuth client registrations to be supplied through external configuration. MCP Dynamic Client Registration is controlled by `auth.mcp.client-registration.enabled` and defaults to disabled.
 
 For GitHub sign-in, the Config Server provides the `spring.security.oauth2.client.registration.github` properties (`client-id`, `client-secret`, and scopes `read:user`, `user:email`). Keep the OAuth App secret in the private configuration/secret store, not in the frontend repository.
 
@@ -171,6 +173,7 @@ The service is deployed separately from the API gateway. Restrict and rate-limit
 - Require exact audience and application-specific scopes at every resource server.
 - Keep OIDC enabled and retain the stable central UUID as the subject.
 - Keep client seeding idempotent and config-driven.
+- Keep open MCP Dynamic Client Registration disabled by default. When enabled, enforce the exact Grok/Cursor callback allow-list, public-client authentication, PKCE, Kanban-only scopes and both MCP/backend audiences.
 - Keep CORS allowed origins and logout redirect URLs as explicit lists; add each first-party app's exact origin and signed-out landing URL when onboarding it.
 - For OIDC, include `openid`; request standard `profile` / `email` scopes only when needed and validate ID tokens in the client.
 - Update README and `CLAUDE.md` when client registration, claims, login, key management or deployment behavior changes.
