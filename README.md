@@ -48,7 +48,7 @@ Keep the issuer stable and consistent with gateway and MCP JWT validation config
 
 ## Registered OAuth clients
 
-Clients are seeded/upserted by `ClientSeeder` at application startup from Config Server properties. Do not edit `oauth2_registered_client` manually.
+Pre-registered clients are seeded/upserted by `ClientSeeder` at application startup from Config Server properties. Grok and Cursor are created by the restricted DCR endpoint described below. Do not edit `oauth2_registered_client` manually.
 
 | Client | Purpose | Typical security model |
 |---|---|---|
@@ -68,7 +68,11 @@ Optional ChatGPT is seeded only when its client ID and at least one redirect URI
 
 - Register exact redirect URIs supplied by the OAuth client product. Never use wildcards.
 - For ChatGPT, use the exact callback URL shown in the connector setup UI. Depending on the integration flow, this may be a callback-specific URL rather than the stable `/connector_platform_oauth_redirect` URI. The server's authorization-response issuer-identification behavior must also match the callback requirements.
-- Gemini MCP uses a per-user callback under `https://oauth-redirect.googleusercontent.com/r/`. The auth server accepts only the Google redirect host and a `user_bound_custom-mcp-...` path whose final resource-host slug matches the configured MCP resource host. No per-user callback is stored in Config Server. The client seeder stores a reserved placeholder URI only because Spring requires a redirect URI on authorization-code client registrations; the Gemini validator never accepts that placeholder. This rule is limited to the Gemini client; every other client retains exact redirect URI matching.
+- Gemini MCP uses a per-user callback under `https://oauth-redirect.googleusercontent.com/r/`. The auth server validates the Google redirect host and callback path; no per-user callback is stored in Config Server. The client seeder stores a reserved placeholder URI because Spring requires a redirect URI on authorization-code client registrations; the Gemini validator never accepts that placeholder.
+- Grok custom MCP connectors use DCR with the observed callback `https://grok.com/connectors-oauth-exchange-code/`.
+- Cursor remote MCP uses DCR with the documented web callback `https://www.cursor.com/agents/mcp/oauth/callback` and desktop callback `http://localhost:8787/callback`.
+- DCR is exposed at `/oauth2/register` and advertised in authorization-server metadata only when `auth.mcp.client-registration.enabled=true`. It is disabled by default and enabled only in Render test via the Config Server `webtools-auth-mcp.yaml` overlay and the Render `public,mcp` profiles.
+- DCR accepts only public Authorization Code clients with PKCE, exact allow-listed callbacks, Kanban MCP scopes and the fixed MCP plus backing API audiences. Client secrets, arbitrary redirect URIs, unrelated scopes and arbitrary resource audiences are rejected.
 - Test the complete authorization-code flow with each product before enabling it for users.
 
 ## Config Server properties
