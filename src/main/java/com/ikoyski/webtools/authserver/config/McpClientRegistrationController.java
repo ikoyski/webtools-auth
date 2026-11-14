@@ -111,8 +111,8 @@ public class McpClientRegistrationController {
         }
 
         String clientName = optionalString(request.get("client_name"), "MCP client").trim();
-        if (clientName.isBlank() || clientName.length() > 100) {
-            throw new IllegalArgumentException("client_name must contain between 1 and 100 characters");
+        if (!clientName.matches("[A-Za-z0-9 ._()\\-]{1,100}")) {
+            throw new IllegalArgumentException("client_name may contain only letters, numbers, spaces and basic punctuation (maximum 100 characters)");
         }
 
         String scopeValue = optionalString(request.get("scope"), "kanban.read kanban.write").trim();
