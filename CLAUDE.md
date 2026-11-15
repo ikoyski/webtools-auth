@@ -23,14 +23,16 @@ Never call an application backend to establish the platform identity. Never stor
 `ClientSeeder` creates or updates registered clients at startup using Config Server properties. Keep this idempotent and config-driven; do not instruct operators to edit the registered-client database table manually.
 
 Current client types include:
-- Claude MCP client.
-- Optional ChatGPT MCP client.
-- Optional Gemini MCP client.
-- Grok and Cursor MCP clients, created through the restricted Dynamic Client Registration endpoint when enabled.
+- Kanban Claude MCP client.
+- Named Homelab MCP clients: `homelab-claude` and `homelab-gemini` (public PKCE), plus `homelab-grok` (confidential `client_secret_post`; configured secret required).
+- Optional ChatGPT and Gemini Kanban MCP clients.
+- Kanban Grok and Cursor MCP clients, created through the restricted Dynamic Client Registration endpoint when enabled.
 - Kanban browser/web client.
 - Additional first-party browser applications configured under `auth.clients.applications`.
 
 ChatGPT registration is optional and requires a client ID plus at least one exact redirect URI. Gemini registration is optional and requires a client ID plus the configured MCP resource; its redirect URI list may be empty because Gemini generates a per-user callback. PKCE is required for both. A configured client secret makes the client confidential and enables client authentication.
+
+The named Homelab clients are seeded from `auth.client.homelab-mcp`. All request only `homelab.read`, use the `auth.client.homelab-mcp.resource` audience, require PKCE and consent, and have one-hour access tokens with no refresh-token grant. They must never receive the Kanban backend audience. Claude uses the exact Claude callbacks; Gemini uses its validated user-bound Google callback and an internal placeholder redirect. Grok uses `https://grok.com/connectors-oauth-exchange-code/` and requires `auth.client.homelab-mcp.grok.client-secret` or the `AUTH_HOMELAB_GROK_CLIENT_SECRET` runtime secret. Never commit that secret.
  
 Grok and Cursor use the restricted DCR endpoint at `/oauth2/register`, advertised through authorization-server metadata only when `auth.mcp.client-registration.enabled=true`. It is disabled by default in application code. The homelab private/base configuration explicitly enables it for controlled Grok testing; Render test enables it through the Config Server's `webtools-auth-mcp.yaml` overlay and the Render-only `public,mcp` profiles. Keep it disabled in environments not being used for integration testing. Accept Authorization Code clients with PKCE and exact callbacks:
 - Grok: `https://grok.com/connectors-oauth-exchange-code/`
@@ -59,7 +61,7 @@ Currently enabled: Google (OIDC) and GitHub (OAuth 2.0).
 
 ## MCP resource audience
 
-Each resource client has a fixed audience. MCP clients use `auth.client.mcp.resource` and also receive the backing Kanban API audience from `auth.client.mcp.backend-resource` (which defaults to `auth.client.web.resource-uri`). This dual audience is intentional: the MCP resource validates the MCP audience, then forwards the same user's delegated token to the Kanban API through the gateway. The Kanban browser client receives only `auth.client.web.resource-uri`; additional first-party browser clients use their own `resource-uri` under `auth.clients.applications`. Never give unrelated first-party apps each other's audiences.
+Each resource client has a fixed audience. Kanban MCP clients use `auth.client.mcp.resource` and also receive the backing Kanban API audience from `auth.client.mcp.backend-resource` (which defaults to `auth.client.web.resource-uri`). This dual audience is intentional: the Kanban MCP resource validates its MCP audience, then forwards the same user's delegated token to the Kanban API through the gateway. Named Homelab MCP clients use only `auth.client.homelab-mcp.resource`; they must never receive the Kanban backend audience. The Kanban browser client receives only `auth.client.web.resource-uri`; additional first-party browser clients use their own `resource-uri` under `auth.clients.applications`. Never give unrelated first-party apps each other's audiences.
 
 This is a fixed per-client resource binding, not dynamic RFC 8707 resource-indicator support. Every gateway/resource server must validate the exact expected audience and required application scopes. A valid signature and issuer alone are not sufficient.
 
@@ -67,7 +69,7 @@ This is a fixed per-client resource binding, not dynamic RFC 8707 resource-indic
 
 - Redirect URI matching must remain exact for every client except the Gemini-specific validated callback described below; never add wildcard callbacks.
 - Gemini user-bound callbacks must use HTTPS, the exact host `oauth-redirect.googleusercontent.com`, and the `/r/user_bound_custom-mcp-...-<resource-host-slug>` path. The suffix is derived from the host of `auth.client.mcp.resource` by replacing dots with underscores. Reject ports, user-info, query strings, fragments, other hosts and malformed paths. Config Server may set `redirect-uris: []`; `ClientSeeder` adds a reserved placeholder because Spring requires a redirect URI on authorization-code client registrations, and the validator must never accept that placeholder.
-- Mark only the Gemini registered client with `gemini.dynamic-redirect-uri=true`; the authorization endpoint uses that marker to select the Gemini validator. All other clients continue to use Spring Authorization Server's default exact-match redirect validator. Keep the default scope validator for every client.
+- Mark each Gemini registered client with `gemini.dynamic-redirect-uri=true`; the authorization endpoint uses that marker to select the Gemini validator. The validator derives the expected resource from that registered client's `mcp.resource` setting, so the Homelab Gemini callback is evaluated using the Homelab resource rather than the Kanban MCP resource. All other clients continue to use Spring Authorization Server's default exact-match redirect validator. Keep the default scope validator for every client.
 - Use the callback URL shown by the specific OAuth client product.
 - ChatGPT may show a callback-specific connector URI; do not assume the stable callback is universally correct. Confirm the authorization server's issuer-identification behavior against the product requirements.
 - Test a full browser authorization and token exchange for each provider/client before enabling it in production.
