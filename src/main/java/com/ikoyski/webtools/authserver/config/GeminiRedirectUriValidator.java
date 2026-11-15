@@ -5,7 +5,6 @@ import java.net.URISyntaxException;
 import java.util.Locale;
 import java.util.regex.Pattern;
 
-import org.springframework.beans.factory.annotation.Value;
 import org.springframework.security.oauth2.core.OAuth2Error;
 import org.springframework.security.oauth2.core.OAuth2ErrorCodes;
 import org.springframework.security.oauth2.server.authorization.authentication.OAuth2AuthorizationCodeRequestAuthenticationContext;
@@ -17,18 +16,16 @@ import org.springframework.stereotype.Component;
 public final class GeminiRedirectUriValidator {
     private static final String GOOGLE_REDIRECT_HOST = "oauth-redirect.googleusercontent.com";
     private static final String CALLBACK_PREFIX = "/r/user_bound_custom-mcp-";
-    private final String resourceHostSlug;
-
-    public GeminiRedirectUriValidator(@Value("${auth.client.mcp.resource:}") String mcpResource) {
-        this.resourceHostSlug = resourceHostSlug(mcpResource);
-    }
-
     public void accept(OAuth2AuthorizationCodeRequestAuthenticationContext context) {
         if (!(context.getAuthentication() instanceof OAuth2AuthorizationCodeRequestAuthenticationToken authentication)) {
             throw invalidRedirectUri();
         }
+        Object resource = context.getRegisteredClient().getClientSettings()
+                .getSetting(ClientSeeder.MCP_RESOURCE_SETTING);
+        String resourceUri = resource instanceof String value ? value : null;
+        String expectedResourceHostSlug = resourceHostSlug(resourceUri);
         String redirectUri = authentication.getRedirectUri();
-        if (!isValidRedirectUri(redirectUri, resourceHostSlug)) {
+        if (!isValidRedirectUri(redirectUri, expectedResourceHostSlug)) {
             throw invalidRedirectUri();
         }
     }
