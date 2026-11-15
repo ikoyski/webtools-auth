@@ -184,6 +184,7 @@ public class ClientSeeder implements ApplicationRunner {
                 .tokenSettings(TokenSettings.builder()
                         .accessTokenFormat(OAuth2TokenFormat.SELF_CONTAINED)
                         .accessTokenTimeToLive(Duration.ofHours(1))
+                        .reuseRefreshTokens(false)
                         .build());
 
         if (confidential) {
