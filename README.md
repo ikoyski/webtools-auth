@@ -125,6 +125,8 @@ auth:
     kanban-mcp:
       resource: https://api.ikoyski.top/kanban-mcp/mcp
       backend-resource: https://api.ikoyski.top/kanban-backend
+    homelab-mcp:
+      resource: https://homelab-mcp.ikoyski.top/mcp
   clients:
     kanban-web:
       client-id: kanban-web
