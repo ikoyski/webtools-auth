@@ -63,9 +63,9 @@ Pre-registered clients are seeded/upserted by `ClientSeeder` at application star
 | Kanban web | Browser application | Public OIDC client with PKCE |
 | Additional first-party apps | Configured browser applications | One public OIDC client per app, PKCE and app-specific API audience |
 
-Kanban MCP clients use `auth.client.mcp.resource` and also receive the backing Kanban API resource URI in `aud`, because the Kanban MCP service forwards the delegated token to that API. Homelab MCP clients use only `auth.client.homelab-mcp.resource`; they never receive the Kanban backend audience. The Kanban web client itself receives only its API audience. Additional first-party browser clients are configured under `auth.clients.applications`; each requires its own exact redirect URI list, scopes and API `resource-uri`.
+Kanban MCP clients use `auth.resources.kanban-mcp.resource` and also receive the backing Kanban API resource URI in `aud`, because the Kanban MCP service forwards the delegated token to that API. Homelab MCP clients use only `auth.resources.homelab-mcp.resource`; they never receive the Kanban backend audience. The Kanban web client itself receives only its API audience. Additional first-party browser clients are configured under `auth.clients.applications`; each requires its own exact redirect URI list, scopes and API `resource-uri`.
 
-Optional ChatGPT is seeded only when its client ID and at least one redirect URI are configured. The named Homelab Claude and Gemini clients are seeded with defaults `homelab-claude` and `homelab-gemini`; Gemini's redirect-uris list is empty because Google supplies a user-bound callback at authorization time. The named Homelab Grok client defaults to `homelab-grok` and is seeded only when `auth.client.homelab-mcp.grok.client-secret` (or `AUTH_HOMELAB_GROK_CLIENT_SECRET`) is configured. Grok's secret is password-encoded in the registered-client database. All MCP clients require PKCE and have one-hour access tokens with no refresh-token grant. The Kanban browser client retains its separately configured eight-hour access-token lifetime.
+Optional ChatGPT is seeded only when its client ID and at least one redirect URI are configured. The named Homelab Claude and Gemini clients are seeded with defaults `homelab-claude` and `homelab-gemini`; Gemini's redirect-uris list is empty because Google supplies a user-bound callback at authorization time. The named Homelab Grok client defaults to `homelab-grok` and is seeded only when `auth.clients.homelab-grok.client-secret` (or `AUTH_HOMELAB_GROK_CLIENT_SECRET`) is configured. Grok's secret is password-encoded in the registered-client database. All MCP clients require PKCE and have one-hour access tokens with no refresh-token grant. The Kanban browser client retains its separately configured eight-hour access-token lifetime.
 
 ### Redirect URI rules
 
@@ -82,22 +82,26 @@ Optional ChatGPT is seeded only when its client ID and at least one redirect URI
 
 ```yaml
 auth:
-  client:
+  resources:
     homelab-mcp:
       resource: https://homelab-mcp.ikoyski.top/mcp
-      claude:
-        client-id: homelab-claude
-        redirect-uris:
-          - https://claude.ai/api/mcp/auth_callback
-          - https://claude.com/api/mcp/auth_callback
-      gemini:
-        client-id: homelab-gemini
-        redirect-uris: []
-      grok:
-        client-id: homelab-grok
-        client-secret: ${AUTH_HOMELAB_GROK_CLIENT_SECRET:}
-        redirect-uris:
-          - https://grok.com/connectors-oauth-exchange-code/
+  clients:
+    homelab-claude:
+      client-id: homelab-claude
+      resource: homelab-mcp
+      redirect-uris:
+        - https://claude.ai/api/mcp/auth_callback
+        - https://claude.com/api/mcp/auth_callback
+    homelab-gemini:
+      client-id: homelab-gemini
+      resource: homelab-mcp
+      redirect-uris: []
+    homelab-grok:
+      client-id: homelab-grok
+      resource: homelab-mcp
+      client-secret: ${AUTH_HOMELAB_GROK_CLIENT_SECRET:}
+      redirect-uris:
+        - https://grok.com/connectors-oauth-exchange-code/
 ```
 
 Set `AUTH_HOMELAB_GROK_CLIENT_SECRET` as a secret in the Auth Server runtime environment. Do not commit the plaintext secret. Claude and Gemini are public PKCE clients and do not need a client secret. Gemini's registered redirect placeholder is validated using that specific client's Homelab resource audience.
