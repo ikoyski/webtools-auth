@@ -59,30 +59,30 @@ public class ClientSeeder implements ApplicationRunner {
 
     public ClientSeeder(RegisteredClientRepository clients,
                         PasswordEncoder passwordEncoder,
-                        @Value("${auth.client.claude.client-id}") String claudeClientId,
-                        @Value("${auth.client.claude.client-secret:}") String claudeClientSecret,
-                        @Value("${auth.client.claude.redirect-uris}") List<String> claudeRedirectUris,
-                        @Value("${auth.client.web.client-id:}") String webClientId,
-                        @Value("${auth.client.web.redirect-uris:}") List<String> webRedirectUris,
-                        @Value("${auth.client.web.access-token-ttl:PT8H}") Duration webAccessTokenTtl,
-                        @Value("${auth.client.web.resource-uri:}") String webResourceUri,
+                        @Value("${auth.clients.kanban-claude.client-id}") String claudeClientId,
+                        @Value("${auth.clients.kanban-claude.client-secret:}") String claudeClientSecret,
+                        @Value("${auth.clients.kanban-claude.redirect-uris}") List<String> claudeRedirectUris,
+                        @Value("${auth.clients.kanban-web.client-id:}") String webClientId,
+                        @Value("${auth.clients.kanban-web.redirect-uris:}") List<String> webRedirectUris,
+                        @Value("${auth.clients.kanban-web.access-token-ttl:PT8H}") Duration webAccessTokenTtl,
+                        @Value("${auth.clients.kanban-web.resource:}") String webResourceUri,
                         ApplicationClientProperties applicationClients,
-                        @Value("${auth.client.mcp.resource:}") String mcpResource,
-                        @Value("${auth.client.mcp.backend-resource:}") String mcpBackendResource,
-                        @Value("${auth.client.chatgpt.client-id:}") String chatgptClientId,
-                        @Value("${auth.client.chatgpt.client-secret:}") String chatgptClientSecret,
-                        @Value("${auth.client.chatgpt.redirect-uris:}") List<String> chatgptRedirectUris,
-                        @Value("${auth.client.gemini.client-id:}") String geminiClientId,
-                        @Value("${auth.client.gemini.client-secret:}") String geminiClientSecret,
-                        @Value("${auth.client.gemini.redirect-uris:}") List<String> geminiRedirectUris,
-                        @Value("${auth.client.homelab-mcp.resource:}") String homelabMcpResource,
-                        @Value("${auth.client.homelab-mcp.claude.client-id:homelab-claude}") String homelabClaudeClientId,
-                        @Value("${auth.client.homelab-mcp.claude.redirect-uris:https://claude.ai/api/mcp/auth_callback,https://claude.com/api/mcp/auth_callback}") List<String> homelabClaudeRedirectUris,
-                        @Value("${auth.client.homelab-mcp.gemini.client-id:homelab-gemini}") String homelabGeminiClientId,
-                        @Value("${auth.client.homelab-mcp.gemini.redirect-uris:}") List<String> homelabGeminiRedirectUris,
-                        @Value("${auth.client.homelab-mcp.grok.client-id:homelab-grok}") String homelabGrokClientId,
-                        @Value("${auth.client.homelab-mcp.grok.client-secret:${AUTH_HOMELAB_GROK_CLIENT_SECRET:}}") String homelabGrokClientSecret,
-                        @Value("${auth.client.homelab-mcp.grok.redirect-uris:https://grok.com/connectors-oauth-exchange-code/}") List<String> homelabGrokRedirectUris) {
+                        @Value("${auth.resources.kanban-mcp.resource:}") String mcpResource,
+                        @Value("${auth.resources.kanban-mcp.backend-resource:}") String mcpBackendResource,
+                        @Value("${auth.clients.kanban-chatgpt.client-id:}") String chatgptClientId,
+                        @Value("${auth.clients.kanban-chatgpt.client-secret:}") String chatgptClientSecret,
+                        @Value("${auth.clients.kanban-chatgpt.redirect-uris:}") List<String> chatgptRedirectUris,
+                        @Value("${auth.clients.kanban-gemini.client-id:}") String geminiClientId,
+                        @Value("${auth.clients.kanban-gemini.client-secret:}") String geminiClientSecret,
+                        @Value("${auth.clients.kanban-gemini.redirect-uris:}") List<String> geminiRedirectUris,
+                        @Value("${auth.resources.homelab-mcp.resource:}") String homelabMcpResource,
+                        @Value("${auth.clients.homelab-claude.client-id:homelab-claude}") String homelabClaudeClientId,
+                        @Value("${auth.clients.homelab-claude.redirect-uris:https://claude.ai/api/mcp/auth_callback,https://claude.com/api/mcp/auth_callback}") List<String> homelabClaudeRedirectUris,
+                        @Value("${auth.clients.homelab-gemini.client-id:homelab-gemini}") String homelabGeminiClientId,
+                        @Value("${auth.clients.homelab-gemini.redirect-uris:}") List<String> homelabGeminiRedirectUris,
+                        @Value("${auth.clients.homelab-grok.client-id:homelab-grok}") String homelabGrokClientId,
+                        @Value("${auth.clients.homelab-grok.client-secret:${AUTH_HOMELAB_GROK_CLIENT_SECRET:}}") String homelabGrokClientSecret,
+                        @Value("${auth.clients.homelab-grok.redirect-uris:https://grok.com/connectors-oauth-exchange-code/}") List<String> homelabGrokRedirectUris) {
         this.clients = clients;
         this.passwordEncoder = passwordEncoder;
         this.claudeClientId = claudeClientId;
@@ -132,7 +132,7 @@ public class ClientSeeder implements ApplicationRunner {
      */
     private void seedHomelabMcpClients() {
         if (isBlank(homelabMcpResource)) {
-            log.warn("Skipping named Homelab MCP clients: auth.client.homelab-mcp.resource is not configured");
+            log.warn("Skipping named Homelab MCP clients: auth.resources.homelab-mcp.resource is not configured");
             return;
         }
 
@@ -144,7 +144,7 @@ public class ClientSeeder implements ApplicationRunner {
                 homelabGeminiRedirectUris, true, false, null);
 
         if (isBlank(homelabGrokClientSecret)) {
-            log.warn("Skipping named Homelab Grok client '{}': configure auth.client.homelab-mcp.grok.client-secret",
+            log.warn("Skipping named Homelab Grok client '{}': configure auth.clients.homelab-grok.client-secret",
                     homelabGrokClientId);
         } else {
             seedHomelabMcpClient(
@@ -204,7 +204,7 @@ public class ClientSeeder implements ApplicationRunner {
         }
         boolean confidential = !isBlank(claudeClientSecret);
         if (!confidential) {
-            log.warn("auth.client.claude.client-secret is not set: registering '{}' as a PUBLIC client. "
+            log.warn("auth.clients.kanban-claude.client-secret is not set: registering '{}' as a PUBLIC client. "
                     + "Refresh tokens are disabled for MCP clients, so the connector must sign in again whenever its access token expires.",
                     claudeClientId);
         }
@@ -292,7 +292,7 @@ public class ClientSeeder implements ApplicationRunner {
             return;
         }
         if (isBlank(mcpResource)) {
-            log.error("Cannot register MCP OAuth client '{}': auth.client.mcp.resource is not configured", clientId);
+            log.error("Cannot register MCP OAuth client '{}': auth.resources.kanban-mcp.resource is not configured", clientId);
             return;
         }
 
