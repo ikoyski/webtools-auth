@@ -26,10 +26,18 @@ Current client types include:
 - Claude MCP client.
 - Optional ChatGPT MCP client.
 - Optional Gemini MCP client.
+- Grok and Cursor MCP clients, created through the restricted Dynamic Client Registration endpoint when enabled.
 - Kanban browser/web client.
 - Additional first-party browser applications configured under `auth.clients.applications`.
 
-ChatGPT registration is optional and requires a client ID plus at least one exact redirect URI. Gemini registration is optional and requires a client ID plus the configured MCP resource; its redirect URI list may be empty because Gemini generates a per-user callback. PKCE is required for both. A configured client secret makes the client confidential and enables client authentication; public clients use no client authentication and do not receive refresh-token grants. Keep provider-specific behavior aligned with the actual integration product.
+ChatGPT registration is optional and requires a client ID plus at least one exact redirect URI. Gemini registration is optional and requires a client ID plus the configured MCP resource; its redirect URI list may be empty because Gemini generates a per-user callback. PKCE is required for both. A configured client secret makes the client confidential and enables client authentication.
+ 
+Grok and Cursor use the restricted DCR endpoint at `/oauth2/register`, advertised through authorization-server metadata only when `auth.mcp.client-registration.enabled=true`. It is disabled by default in application code. The homelab private/base configuration explicitly enables it for controlled Grok testing; Render test enables it through the Config Server's `webtools-auth-mcp.yaml` overlay and the Render-only `public,mcp` profiles. Keep it disabled in environments not being used for integration testing. Accept Authorization Code clients with PKCE and exact callbacks:
+- Grok: `https://grok.com/connectors-oauth-exchange-code/`
+- Cursor web: `https://www.cursor.com/agents/mcp/oauth/callback`
+- Cursor desktop: `http://localhost:8787/callback`
+
+Cursor remains a public client using `none`. Grok alone may use `client_secret_post` with its exact callback; generate its high-entropy secret server-side, store only the password-encoded value and return the secret once. Reject caller-supplied secrets, other redirect URIs, unsupported grants and scopes outside `kanban.read`, `kanban.write`, and optional `offline_access`. DCR-created clients must receive both configured MCP and backing Kanban API audiences. Do not enable DCR in production without explicit approval and a completed end-to-end review.
 
 ## Federated identity providers
 
@@ -66,7 +74,8 @@ This is a fixed per-client resource binding, not dynamic RFC 8707 resource-indic
 
 ## Important implementation areas
 
-- `ClientSeeder` — config-driven client creation/update, public/confidential client behavior, MCP resource binding and the Gemini dynamic-redirect client marker.
+- `ClientSeeder` — config-driven pre-registered client creation/update, public/confidential client behavior, MCP resource binding and the Gemini dynamic-redirect client marker.
+- `McpClientRegistrationController` — restricted RFC 7591 registration for Grok/Cursor; disabled by default and enabled only through an explicit environment-specific Config Server setting.
 - `GeminiRedirectUriValidator` — strict validation of Gemini's user-bound callback against the configured MCP resource host.
 - `AuthorizationServerConfig` — authorization server components, OIDC ID-token claims and JWT access-token customization.
 - `FederatedLoginSuccessHandler` — federated login completion and central identity resolution.
