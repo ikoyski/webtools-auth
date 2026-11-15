@@ -20,6 +20,8 @@ import org.mockito.Mock;
 import org.mockito.junit.jupiter.MockitoExtension;
 import org.springframework.http.HttpStatus;
 import org.springframework.http.ResponseEntity;
+import org.springframework.security.crypto.bcrypt.BCryptPasswordEncoder;
+import org.springframework.security.crypto.password.PasswordEncoder;
 import org.springframework.security.oauth2.core.AuthorizationGrantType;
 import org.springframework.security.oauth2.core.ClientAuthenticationMethod;
 import org.springframework.security.oauth2.server.authorization.client.RegisteredClient;
@@ -34,12 +36,14 @@ class McpClientRegistrationControllerTest {
     @Mock
     private RegisteredClientRepository clients;
 
+    private final PasswordEncoder passwordEncoder = new BCryptPasswordEncoder();
+
     @Test
-    void registersPublicPkceClientForGrokCallback() {
+    void registersPublicPkceClientForCursorCallback() {
         McpClientRegistrationController controller = controller(true);
         Map<String, Object> request = Map.of(
-                "client_name", "Grok Kanban",
-                "redirect_uris", List.of("https://grok.com/connectors-oauth-exchange-code/"),
+                "client_name", "Cursor",
+                "redirect_uris", List.of("https://www.cursor.com/agents/mcp/oauth/callback"),
                 "grant_types", List.of("authorization_code", "refresh_token"),
                 "response_types", List.of("code"),
                 "token_endpoint_auth_method", "none",
@@ -61,32 +65,55 @@ class McpClientRegistrationControllerTest {
         assertTrue(registered.getClientSettings().isRequireAuthorizationConsent());
         assertEquals(Set.of("kanban.read", "kanban.write", "offline_access"), registered.getScopes());
         assertTrue(registered.getAuthorizationGrantTypes().contains(AuthorizationGrantType.REFRESH_TOKEN));
-        assertEquals(Set.of("https://grok.com/connectors-oauth-exchange-code/"), registered.getRedirectUris());
+        assertEquals(Set.of("https://www.cursor.com/agents/mcp/oauth/callback"), registered.getRedirectUris());
         assertEquals(MCP_RESOURCE, registered.getClientSettings().getSetting(ClientSeeder.MCP_RESOURCE_SETTING));
         assertEquals(BACKEND_RESOURCE,
                 registered.getClientSettings().getSetting(ClientSeeder.MCP_BACKEND_RESOURCE_SETTING));
     }
 
     @Test
-    void registersCursorDesktopAndWebCallbacks() {
+    void registersGrokAsConfidentialClientWithOneTimeGeneratedSecret() {
         McpClientRegistrationController controller = controller(true);
         Map<String, Object> request = Map.of(
-                "client_name", "Cursor",
-                "redirect_uris", List.of(
-                        "https://www.cursor.com/agents/mcp/oauth/callback",
-                        "http://localhost:8787/callback"),
-                "grant_types", List.of("authorization_code"),
+                "client_name", "Grok Kanban",
+                "redirect_uris", List.of("https://grok.com/connectors-oauth-exchange-code/"),
+                "grant_types", List.of("authorization_code", "refresh_token"),
                 "response_types", List.of("code"),
-                "token_endpoint_auth_method", "none",
-                "scope", "kanban.read kanban.write");
+                "token_endpoint_auth_method", "client_secret_post",
+                "scope", "kanban.read kanban.write offline_access");
 
         ResponseEntity<Map<String, Object>> response = controller.register(request);
 
         assertEquals(HttpStatus.CREATED, response.getStatusCode());
+        assertNotNull(response.getBody());
+        String clientSecret = (String) response.getBody().get("client_secret");
+        assertNotNull(clientSecret);
+        assertEquals(0, response.getBody().get("client_secret_expires_at"));
+        assertEquals("client_secret_post", response.getBody().get("token_endpoint_auth_method"));
+
         ArgumentCaptor<RegisteredClient> captor = ArgumentCaptor.forClass(RegisteredClient.class);
         verify(clients).save(captor.capture());
-        assertEquals(2, captor.getValue().getRedirectUris().size());
-        assertFalse(captor.getValue().getAuthorizationGrantTypes().contains(AuthorizationGrantType.REFRESH_TOKEN));
+        RegisteredClient registered = captor.getValue();
+        assertEquals(Set.of(ClientAuthenticationMethod.CLIENT_SECRET_POST),
+                registered.getClientAuthenticationMethods());
+        assertNotNull(registered.getClientSecret());
+        assertTrue(passwordEncoder.matches(clientSecret, registered.getClientSecret()));
+        assertTrue(registered.getClientSettings().isRequireProofKey());
+        assertTrue(registered.getClientSettings().isRequireAuthorizationConsent());
+        assertEquals(Set.of("kanban.read", "kanban.write", "offline_access"), registered.getScopes());
+    }
+
+    @Test
+    void rejectsClientSecretPostForNonGrokCallback() {
+        McpClientRegistrationController controller = controller(true);
+        Map<String, Object> request = Map.of(
+                "redirect_uris", List.of("https://www.cursor.com/agents/mcp/oauth/callback"),
+                "token_endpoint_auth_method", "client_secret_post");
+
+        ResponseEntity<Map<String, Object>> response = controller.register(request);
+
+        assertEquals(HttpStatus.BAD_REQUEST, response.getStatusCode());
+        verify(clients, never()).save(any());
     }
 
     @Test
@@ -103,7 +130,7 @@ class McpClientRegistrationControllerTest {
     }
 
     @Test
-    void rejectsConfidentialClients() {
+    void rejectsClientSuppliedSecrets() {
         McpClientRegistrationController controller = controller(true);
         Map<String, Object> request = Map.of(
                 "redirect_uris", List.of("https://grok.com/connectors-oauth-exchange-code/"),
@@ -153,6 +180,6 @@ class McpClientRegistrationControllerTest {
 
     private McpClientRegistrationController controller(boolean enabled) {
         return new McpClientRegistrationController(
-                clients, enabled, MCP_RESOURCE, BACKEND_RESOURCE);
+                clients, passwordEncoder, enabled, MCP_RESOURCE, BACKEND_RESOURCE);
     }
 }
