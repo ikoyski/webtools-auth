@@ -37,7 +37,7 @@ import org.springframework.web.bind.annotation.RestController;
  * Registration is disabled by default and is enabled only in the Render test profile.
  * Cursor uses public Authorization Code + PKCE. Grok's observed DCR request uses
  * client_secret_post, so Grok receives a generated confidential-client secret. Both
- * clients remain restricted to exact callback URIs and the Kanban MCP scopes/audiences.
+ * clients remain restricted to approved callback URIs and one application-specific resource audience.
  */
 @RestController
 public class McpClientRegistrationController {
@@ -48,28 +48,34 @@ public class McpClientRegistrationController {
     private static final String GROK_REDIRECT_URI = "https://grok.com/connectors-oauth-exchange-code/";
     private static final Set<String> ALLOWED_REDIRECT_URIS = Set.of(
             GROK_REDIRECT_URI,
+            "https://claude.ai/api/mcp/auth_callback",
+            "https://claude.com/api/mcp/auth_callback",
             "https://www.cursor.com/agents/mcp/oauth/callback",
             "http://localhost:8787/callback");
     private static final Set<String> ALLOWED_GRANT_TYPES = Set.of("authorization_code", "refresh_token");
-    private static final Set<String> ALLOWED_SCOPES = Set.of("kanban.read", "kanban.write", "offline_access");
+    private static final Set<String> KANBAN_SCOPES = Set.of("kanban.read", "kanban.write", "offline_access");
+    private static final Set<String> HOMELAB_SCOPES = Set.of("homelab.read", "offline_access");
 
     private final RegisteredClientRepository clients;
     private final PasswordEncoder passwordEncoder;
     private final boolean enabled;
     private final String mcpResource;
     private final String mcpBackendResource;
+    private final String homelabMcpResource;
 
     public McpClientRegistrationController(
             RegisteredClientRepository clients,
             PasswordEncoder passwordEncoder,
             @Value("${auth.mcp.client-registration.enabled:false}") boolean enabled,
             @Value("${auth.client.mcp.resource:}") String mcpResource,
-            @Value("${auth.client.mcp.backend-resource:${auth.client.web.resource-uri:}}") String mcpBackendResource) {
+            @Value("${auth.client.mcp.backend-resource:${auth.client.web.resource-uri:}}") String mcpBackendResource,
+            @Value("${auth.client.homelab-mcp.resource:}") String homelabMcpResource) {
         this.clients = clients;
         this.passwordEncoder = passwordEncoder;
         this.enabled = enabled;
         this.mcpResource = mcpResource == null ? "" : mcpResource.trim();
         this.mcpBackendResource = mcpBackendResource == null ? "" : mcpBackendResource.trim();
+        this.homelabMcpResource = homelabMcpResource == null ? "" : homelabMcpResource.trim();
     }
 
     @PostMapping(path = "/oauth2/register", consumes = MediaType.APPLICATION_JSON_VALUE,
@@ -78,11 +84,6 @@ public class McpClientRegistrationController {
         if (!enabled) {
             return ResponseEntity.notFound().build();
         }
-        if (mcpResource.isBlank() || mcpBackendResource.isBlank()) {
-            return error(HttpStatus.SERVICE_UNAVAILABLE, "server_error",
-                    "MCP resource audiences are not configured");
-        }
-
         try {
             return createClient(request);
         } catch (IllegalArgumentException ex) {
@@ -141,10 +142,13 @@ public class McpClientRegistrationController {
         }
 
         List<String> redirectUris = stringList(request.get("redirect_uris"), "redirect_uris", List.of());
-        if (redirectUris.isEmpty() || redirectUris.size() > ALLOWED_REDIRECT_URIS.size()
+        boolean geminiDynamicRedirect = redirectUris.size() == 1
+                && GeminiRedirectUriValidator.isValidRedirectUri(
+                        redirectUris.get(0), GeminiRedirectUriValidator.resourceHostSlug(homelabMcpResource));
+        if (redirectUris.isEmpty() || redirectUris.size() > 2
                 || new LinkedHashSet<>(redirectUris).size() != redirectUris.size()
-                || !ALLOWED_REDIRECT_URIS.containsAll(redirectUris)) {
-            throw new IllegalArgumentException("redirect_uris must contain only the approved Grok or Cursor callback URLs");
+                || (!ALLOWED_REDIRECT_URIS.containsAll(redirectUris) && !geminiDynamicRedirect)) {
+            throw new IllegalArgumentException("redirect_uris must contain only approved Claude, Grok, Cursor or Gemini callback URLs");
         }
 
         List<String> grantTypes = stringList(request.get("grant_types"), "grant_types",
@@ -178,14 +182,24 @@ public class McpClientRegistrationController {
         Set<String> scopes = new LinkedHashSet<>();
         for (String scope : scopeValue.split("\\s+")) {
             if (!scope.isBlank()) {
-                if (!ALLOWED_SCOPES.contains(scope)) {
+                if (!KANBAN_SCOPES.contains(scope) && !HOMELAB_SCOPES.contains(scope)) {
                     throw new IllegalArgumentException("Requested scope is not available to MCP clients: " + scope);
                 }
                 scopes.add(scope);
             }
         }
-        if (!scopes.contains("kanban.read")) {
+        boolean homelabClient = scopes.contains("homelab.read");
+        if (homelabClient && scopes.stream().anyMatch(scope -> !HOMELAB_SCOPES.contains(scope))) {
+            throw new IllegalArgumentException("Homelab and Kanban scopes cannot be combined in one client");
+        }
+        if (!homelabClient && !scopes.contains("kanban.read")) {
             throw new IllegalArgumentException("The kanban.read scope is required");
+        }
+        if (homelabClient && homelabMcpResource.isBlank()) {
+            throw new IllegalArgumentException("The Homelab MCP resource audience is not configured");
+        }
+        if (!homelabClient && (mcpResource.isBlank() || mcpBackendResource.isBlank())) {
+            throw new IllegalArgumentException("Kanban MCP resource audiences are not configured");
         }
         if (scopes.contains("offline_access") && !grantTypeSet.contains(AuthorizationGrantType.REFRESH_TOKEN.getValue())) {
             throw new IllegalArgumentException("offline_access requires the refresh_token grant");
@@ -205,8 +219,7 @@ public class McpClientRegistrationController {
                 .clientSettings(ClientSettings.builder()
                         .requireProofKey(true)
                         .requireAuthorizationConsent(true)
-                        .setting(ClientSeeder.MCP_RESOURCE_SETTING, mcpResource)
-                        .setting(ClientSeeder.MCP_BACKEND_RESOURCE_SETTING, mcpBackendResource)
+                        .setting(ClientSeeder.MCP_RESOURCE_SETTING, homelabClient ? homelabMcpResource : mcpResource)
                         .build())
                 .tokenSettings(TokenSettings.builder()
                         .accessTokenFormat(OAuth2TokenFormat.SELF_CONTAINED)
@@ -215,6 +228,14 @@ public class McpClientRegistrationController {
                         .reuseRefreshTokens(false)
                         .build());
 
+        if (homelabClient) {
+            // Homelab tokens are intentionally bound to the Homelab MCP audience only.
+            // Never attach the Kanban backend audience to this client.
+        }
+        if (geminiDynamicRedirect) {
+            builder.clientSettings(ClientSettings.withSettings(builder.build().getClientSettings().getSettings())
+                    .setting(ClientSeeder.GEMINI_DYNAMIC_REDIRECT_SETTING, true).build());
+        }
         if (clientSecret != null) {
             builder.clientSecret(passwordEncoder.encode(clientSecret));
         }
