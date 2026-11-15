@@ -48,6 +48,14 @@ public class ClientSeeder implements ApplicationRunner {
     private final String geminiClientId;
     private final String geminiClientSecret;
     private final List<String> geminiRedirectUris;
+    private final String homelabMcpResource;
+    private final String homelabClaudeClientId;
+    private final List<String> homelabClaudeRedirectUris;
+    private final String homelabGeminiClientId;
+    private final List<String> homelabGeminiRedirectUris;
+    private final String homelabGrokClientId;
+    private final String homelabGrokClientSecret;
+    private final List<String> homelabGrokRedirectUris;
 
     public ClientSeeder(RegisteredClientRepository clients,
                         PasswordEncoder passwordEncoder,
@@ -66,7 +74,15 @@ public class ClientSeeder implements ApplicationRunner {
                         @Value("${auth.client.chatgpt.redirect-uris:}") List<String> chatgptRedirectUris,
                         @Value("${auth.client.gemini.client-id:}") String geminiClientId,
                         @Value("${auth.client.gemini.client-secret:}") String geminiClientSecret,
-                        @Value("${auth.client.gemini.redirect-uris:}") List<String> geminiRedirectUris) {
+                        @Value("${auth.client.gemini.redirect-uris:}") List<String> geminiRedirectUris,
+                        @Value("${auth.client.homelab-mcp.resource:}") String homelabMcpResource,
+                        @Value("${auth.client.homelab-mcp.claude.client-id:homelab-claude}") String homelabClaudeClientId,
+                        @Value("${auth.client.homelab-mcp.claude.redirect-uris:https://claude.ai/api/mcp/auth_callback,https://claude.com/api/mcp/auth_callback}") List<String> homelabClaudeRedirectUris,
+                        @Value("${auth.client.homelab-mcp.gemini.client-id:homelab-gemini}") String homelabGeminiClientId,
+                        @Value("${auth.client.homelab-mcp.gemini.redirect-uris:}") List<String> homelabGeminiRedirectUris,
+                        @Value("${auth.client.homelab-mcp.grok.client-id:homelab-grok}") String homelabGrokClientId,
+                        @Value("${auth.client.homelab-mcp.grok.client-secret:${AUTH_HOMELAB_GROK_CLIENT_SECRET:}}") String homelabGrokClientSecret,
+                        @Value("${auth.client.homelab-mcp.grok.redirect-uris:https://grok.com/connectors-oauth-exchange-code/}") List<String> homelabGrokRedirectUris) {
         this.clients = clients;
         this.passwordEncoder = passwordEncoder;
         this.claudeClientId = claudeClientId;
@@ -86,6 +102,14 @@ public class ClientSeeder implements ApplicationRunner {
         this.geminiClientId = geminiClientId;
         this.geminiClientSecret = geminiClientSecret;
         this.geminiRedirectUris = geminiRedirectUris;
+        this.homelabMcpResource = homelabMcpResource == null ? "" : homelabMcpResource.trim();
+        this.homelabClaudeClientId = homelabClaudeClientId;
+        this.homelabClaudeRedirectUris = homelabClaudeRedirectUris;
+        this.homelabGeminiClientId = homelabGeminiClientId;
+        this.homelabGeminiRedirectUris = homelabGeminiRedirectUris;
+        this.homelabGrokClientId = homelabGrokClientId;
+        this.homelabGrokClientSecret = homelabGrokClientSecret;
+        this.homelabGrokRedirectUris = homelabGrokRedirectUris;
     }
 
     @Override
@@ -98,6 +122,78 @@ public class ClientSeeder implements ApplicationRunner {
         // Gemini creates a per-user callback URL. Its exact URL is validated at authorization time.
         seedMcpClient(geminiClientId, geminiClientSecret, "Gemini MCP connector",
                 geminiRedirectUris, true, true);
+        seedHomelabMcpClients();
+    }
+
+    /**
+     * Registers stable, provider-specific OAuth client IDs for the Homelab MCP resource.
+     * These clients are pre-registered so Claude, Gemini and Grok can use "Use your own
+     * OAuth client" / manual registration instead of receiving random DCR client IDs.
+     */
+    private void seedHomelabMcpClients() {
+        if (isBlank(homelabMcpResource)) {
+            log.warn("Skipping named Homelab MCP clients: auth.client.homelab-mcp.resource is not configured");
+            return;
+        }
+
+        seedHomelabMcpClient(
+                homelabClaudeClientId, "Homelab MCP - Claude",
+                homelabClaudeRedirectUris, false, false, null);
+        seedHomelabMcpClient(
+                homelabGeminiClientId, "Homelab MCP - Gemini",
+                homelabGeminiRedirectUris, true, false, null);
+
+        if (isBlank(homelabGrokClientSecret)) {
+            log.warn("Skipping named Homelab Grok client '{}': configure auth.client.homelab-mcp.grok.client-secret",
+                    homelabGrokClientId);
+        } else {
+            seedHomelabMcpClient(
+                    homelabGrokClientId, "Homelab MCP - Grok",
+                    homelabGrokRedirectUris, false, true, homelabGrokClientSecret);
+        }
+    }
+
+    private void seedHomelabMcpClient(
+            String clientId,
+            String clientName,
+            List<String> redirectUris,
+            boolean geminiDynamicRedirect,
+            boolean confidential,
+            String clientSecret) {
+
+        List<String> uris = clean(redirectUris);
+        if (isBlank(clientId) || (uris.isEmpty() && !geminiDynamicRedirect)) {
+            log.warn("Skipping incomplete named Homelab MCP client '{}': client ID and redirect URI are required",
+                    clientId);
+            return;
+        }
+
+        List<String> registeredUris = uris.isEmpty() && geminiDynamicRedirect
+                ? List.of(GEMINI_REDIRECT_URI_PLACEHOLDER) : uris;
+        ClientSettings.Builder settings = ClientSettings.builder()
+                .requireProofKey(true)
+                .requireAuthorizationConsent(true)
+                .setting(MCP_RESOURCE_SETTING, homelabMcpResource);
+        if (geminiDynamicRedirect) {
+            settings.setting(GEMINI_DYNAMIC_REDIRECT_SETTING, true);
+        }
+
+        RegisteredClient.Builder builder = base(clientId, clientName, registeredUris)
+                .scope("homelab.read")
+                .clientSettings(settings.build())
+                .tokenSettings(TokenSettings.builder()
+                        .accessTokenFormat(OAuth2TokenFormat.SELF_CONTAINED)
+                        .accessTokenTimeToLive(Duration.ofHours(1))
+                        .build());
+
+        if (confidential) {
+            builder.clientSecret(passwordEncoder.encode(clientSecret))
+                    .clientAuthenticationMethod(ClientAuthenticationMethod.CLIENT_SECRET_POST);
+        } else {
+            builder.clientAuthenticationMethod(ClientAuthenticationMethod.NONE);
+        }
+
+        save(builder.build());
     }
 
     private void seedClaude() {
