@@ -117,26 +117,54 @@ Representative MCP client configuration:
 ```yaml
 auth:
   issuer: https://auth.ikoyski.top
-  client:
-    web:
-      resource-uri: https://api.example.com/kanban-backend
-    mcp:
+  mcp:
+    # Enable only in a controlled integration-test environment.
+    client-registration:
+      enabled: true
+  resources:
+    kanban-mcp:
       resource: https://api.ikoyski.top/kanban-mcp/mcp
       backend-resource: https://api.ikoyski.top/kanban-backend
-      # Homelab integration testing only; leave false in production deployments.
-      client-registration:
-        enabled: true
-    claude:
-      # Existing Claude client configuration
-    chatgpt:
+  clients:
+    kanban-web:
+      client-id: kanban-web
+      resource: https://api.ikoyski.top/kanban-backend
+      redirect-uris:
+        - https://pages.ikoyski.top/kanban/kanban.html
+      access-token-ttl: ${AUTH_WEB_ACCESS_TOKEN_TTL:PT8H}
+    kanban-claude:
+      client-id: kanban-claude
+      resource: kanban-mcp
+      client-secret: ${AUTH_CLAUDE_CLIENT_SECRET:}
+      redirect-uris:
+        - https://claude.ai/api/mcp/auth_callback
+    kanban-chatgpt:
       client-id: kanban-chatgpt
+      resource: kanban-mcp
       client-secret: ${AUTH_CHATGPT_CLIENT_SECRET:}
       redirect-uris:
-        - ${CHATGPT_OAUTH_REDIRECT_URI}
-    gemini:
+        - https://chatgpt.com/connector_platform_oauth_redirect
+    kanban-gemini:
       client-id: kanban-gemini
+      resource: kanban-mcp
       client-secret: ${AUTH_GEMINI_CLIENT_SECRET:}
       redirect-uris: [] # Gemini supplies a per-user callback; validated by the auth server
+    homelab-claude:
+      client-id: homelab-claude
+      resource: homelab-mcp
+      redirect-uris:
+        - https://claude.ai/api/mcp/auth_callback
+        - https://claude.com/api/mcp/auth_callback
+    homelab-gemini:
+      client-id: homelab-gemini
+      resource: homelab-mcp
+      redirect-uris: []
+    homelab-grok:
+      client-id: homelab-grok
+      resource: homelab-mcp
+      client-secret: ${AUTH_HOMELAB_GROK_CLIENT_SECRET:}
+      redirect-uris:
+        - https://grok.com/connectors-oauth-exchange-code/
   clients:
     applications:
       - client-id: ipon-web
