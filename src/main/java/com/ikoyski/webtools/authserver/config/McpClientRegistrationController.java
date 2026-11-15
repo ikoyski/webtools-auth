@@ -209,6 +209,14 @@ public class McpClientRegistrationController {
         Instant issuedAt = Instant.now();
         String clientSecret = confidentialGrokClient ? generateClientSecret() : null;
 
+        ClientSettings.Builder clientSettingsBuilder = ClientSettings.builder()
+                .requireProofKey(true)
+                .requireAuthorizationConsent(true)
+                .setting(ClientSeeder.MCP_RESOURCE_SETTING, homelabClient ? homelabMcpResource : mcpResource);
+        if (geminiDynamicRedirect) {
+            clientSettingsBuilder.setting(ClientSeeder.GEMINI_DYNAMIC_REDIRECT_SETTING, true);
+        }
+
         RegisteredClient.Builder builder = RegisteredClient.withId(UUID.randomUUID().toString())
                 .clientId(clientId)
                 .clientIdIssuedAt(issuedAt)
@@ -216,11 +224,7 @@ public class McpClientRegistrationController {
                 .clientAuthenticationMethod(confidentialGrokClient
                         ? ClientAuthenticationMethod.CLIENT_SECRET_POST : ClientAuthenticationMethod.NONE)
                 .authorizationGrantType(AuthorizationGrantType.AUTHORIZATION_CODE)
-                .clientSettings(ClientSettings.builder()
-                        .requireProofKey(true)
-                        .requireAuthorizationConsent(true)
-                        .setting(ClientSeeder.MCP_RESOURCE_SETTING, homelabClient ? homelabMcpResource : mcpResource)
-                        .build())
+                .clientSettings(clientSettingsBuilder.build())
                 .tokenSettings(TokenSettings.builder()
                         .accessTokenFormat(OAuth2TokenFormat.SELF_CONTAINED)
                         .accessTokenTimeToLive(Duration.ofHours(1))
@@ -228,14 +232,6 @@ public class McpClientRegistrationController {
                         .reuseRefreshTokens(false)
                         .build());
 
-        if (homelabClient) {
-            // Homelab tokens are intentionally bound to the Homelab MCP audience only.
-            // Never attach the Kanban backend audience to this client.
-        }
-        if (geminiDynamicRedirect) {
-            builder.clientSettings(ClientSettings.withSettings(builder.build().getClientSettings().getSettings())
-                    .setting(ClientSeeder.GEMINI_DYNAMIC_REDIRECT_SETTING, true).build());
-        }
         if (clientSecret != null) {
             builder.clientSecret(passwordEncoder.encode(clientSecret));
         }
