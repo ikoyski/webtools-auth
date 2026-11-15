@@ -62,7 +62,7 @@ public final class GeminiRedirectUriValidator {
         }
     }
 
-    private static String resourceHostSlug(String resource) {
+    static String resourceHostSlug(String resource) {
         if (resource == null || resource.isBlank()) {
             return null;
         }
