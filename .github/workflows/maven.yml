@@ -47,7 +47,7 @@ jobs:
         id: meta
         uses: docker/metadata-action@v5
         with:
-          images: ikoyski/webtools-kanban-auth
+          images: ikoyski/webtools-auth
   
       - name: Build and push Docker image
         if: github.event_name == 'push' && github.ref == 'refs/heads/master'
@@ -55,5 +55,5 @@ jobs:
         with:
           context: .
           push: true
-          tags: ikoyski/webtools-kanban-auth:latest
+          tags: ikoyski/webtools-auth:latest
           labels: ${{ steps.meta.outputs.labels }}
