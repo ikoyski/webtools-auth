@@ -10,6 +10,8 @@ import java.util.Map;
 import java.util.Set;
 import java.util.UUID;
 
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
 import org.springframework.beans.factory.annotation.Value;
 import org.springframework.http.CacheControl;
 import org.springframework.http.HttpStatus;
@@ -35,6 +37,8 @@ import org.springframework.web.bind.annotation.RestController;
  */
 @RestController
 public class McpClientRegistrationController {
+
+    private static final Logger log = LoggerFactory.getLogger(McpClientRegistrationController.class);
 
     private static final Set<String> ALLOWED_REDIRECT_URIS = Set.of(
             "https://grok.com/connectors-oauth-exchange-code/",
@@ -73,8 +77,29 @@ public class McpClientRegistrationController {
         try {
             return createClient(request);
         } catch (IllegalArgumentException ex) {
+            // Log only a fixed diagnostic category. Never log submitted metadata,
+            // client names, redirect URIs, scope values, or exception messages.
+            String reason = rejectionReason(ex.getMessage());
+            log.warn("mcp_client_registration_rejected reason={}", reason);
             return error(HttpStatus.BAD_REQUEST, "invalid_client_metadata", ex.getMessage());
         }
+    }
+
+    private static String rejectionReason(String message) {
+        if (message == null) return "invalid_metadata";
+        if (message.contains("JSON client registration request")) return "missing_request";
+        if (message.contains("public MCP clients")) return "client_secret_not_allowed";
+        if (message.startsWith("redirect_uris")) return "invalid_redirect_uris";
+        if (message.contains("grant")) return "unsupported_grant_types";
+        if (message.contains("response type")) return "unsupported_response_types";
+        if (message.contains("token_endpoint_auth_method")) return "unsupported_token_endpoint_auth_method";
+        if (message.startsWith("client_name")) return "invalid_client_name";
+        if (message.startsWith("Requested scope")) return "unsupported_scope";
+        if (message.contains("kanban.read")) return "required_scope_missing";
+        if (message.contains("Client registration string fields")) return "invalid_string_field_type";
+        if (message.contains("must be an array of strings")) return "invalid_array_field";
+        if (message.contains("must contain only non-empty strings")) return "invalid_array_item";
+        return "invalid_metadata";
     }
 
     private ResponseEntity<Map<String, Object>> createClient(Map<String, Object> request) {
