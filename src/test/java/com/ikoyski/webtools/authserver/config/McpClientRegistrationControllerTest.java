@@ -138,6 +138,19 @@ class McpClientRegistrationControllerTest {
         verify(clients, never()).save(any());
     }
 
+    @Test
+    void classifiesKnownTokenEndpointAuthenticationMethodsWithoutExposingUnknownValues() {
+        assertEquals("omitted", McpClientRegistrationController.authenticationMethodCategory(null));
+        assertEquals("none", McpClientRegistrationController.authenticationMethodCategory("none"));
+        assertEquals("client_secret_basic",
+                McpClientRegistrationController.authenticationMethodCategory("client_secret_basic"));
+        assertEquals("client_secret_post",
+                McpClientRegistrationController.authenticationMethodCategory("client_secret_post"));
+        assertEquals("other",
+                McpClientRegistrationController.authenticationMethodCategory("arbitrary-client-value"));
+        assertEquals("invalid_type", McpClientRegistrationController.authenticationMethodCategory(42));
+    }
+
     private McpClientRegistrationController controller(boolean enabled) {
         return new McpClientRegistrationController(
                 clients, enabled, MCP_RESOURCE, BACKEND_RESOURCE);
