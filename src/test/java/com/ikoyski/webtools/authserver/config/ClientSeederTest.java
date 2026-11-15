@@ -88,6 +88,52 @@ class ClientSeederTest {
                 captor.getAllValues().stream().map(RegisteredClient::getClientId).collect(Collectors.toSet()));
     }
 
+    @Test
+    void seedsKanbanClientsWithKanbanAudiencesAndKeepsWebClientSeparate() throws Exception {
+        when(clients.findByClientId(anyString())).thenReturn(null);
+        ClientSeeder seeder = new ClientSeeder(
+                clients,
+                passwordEncoder,
+                "kanban-claude", "", List.of(CLAUDE_CALLBACK),
+                "kanban-web", List.of("https://pages.ikoyski.top/kanban/kanban.html"),
+                Duration.ofHours(8), "https://api.ikoyski.top/kanban-backend",
+                new ApplicationClientProperties(),
+                "https://api.ikoyski.top/kanban-mcp/mcp",
+                "https://api.ikoyski.top/kanban-backend",
+                "kanban-chatgpt", "", List.of("https://chatgpt.com/connector_platform_oauth_redirect"),
+                "kanban-gemini", "", List.of(),
+                HOMELAB_RESOURCE,
+                "homelab-claude", List.of(CLAUDE_CALLBACK),
+                "homelab-gemini", List.of(),
+                "homelab-grok", "", List.of(GROK_CALLBACK));
+
+        seeder.run(new DefaultApplicationArguments());
+
+        ArgumentCaptor<RegisteredClient> captor = ArgumentCaptor.forClass(RegisteredClient.class);
+        verify(clients, times(6)).save(captor.capture());
+        Map<String, RegisteredClient> registered = captor.getAllValues().stream()
+                .collect(Collectors.toMap(RegisteredClient::getClientId, Function.identity()));
+
+        RegisteredClient kanbanClaude = registered.get("kanban-claude");
+        assertEquals(Set.of("kanban.read", "kanban.write"), kanbanClaude.getScopes());
+        assertEquals("https://api.ikoyski.top/kanban-mcp/mcp",
+                kanbanClaude.getClientSettings().getSetting(ClientSeeder.MCP_RESOURCE_SETTING));
+        assertEquals("https://api.ikoyski.top/kanban-backend",
+                kanbanClaude.getClientSettings().getSetting(ClientSeeder.MCP_BACKEND_RESOURCE_SETTING));
+
+        RegisteredClient kanbanWeb = registered.get("kanban-web");
+        assertEquals(Set.of("openid", "profile", "email", "kanban.read", "kanban.write"),
+                kanbanWeb.getScopes());
+        assertEquals("https://api.ikoyski.top/kanban-backend",
+                kanbanWeb.getClientSettings().getSetting(ClientSeeder.RESOURCE_URI_SETTING));
+        assertNull(kanbanWeb.getClientSettings().getSetting(ClientSeeder.MCP_RESOURCE_SETTING));
+        assertEquals(Duration.ofHours(8), kanbanWeb.getTokenSettings().getAccessTokenTimeToLive());
+
+        RegisteredClient homelabClaude = registered.get("homelab-claude");
+        assertPublicHomelabClient(homelabClaude);
+        assertEquals(Set.of(CLAUDE_CALLBACK), homelabClaude.getRedirectUris());
+    }
+
     private ClientSeeder seeder(String grokSecret) {
         return new ClientSeeder(
                 clients,
