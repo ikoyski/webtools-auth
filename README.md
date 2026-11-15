@@ -165,7 +165,6 @@ auth:
       client-secret: ${AUTH_HOMELAB_GROK_CLIENT_SECRET:}
       redirect-uris:
         - https://grok.com/connectors-oauth-exchange-code/
-  clients:
     applications:
       - client-id: ipon-web
         name: Ipon web
