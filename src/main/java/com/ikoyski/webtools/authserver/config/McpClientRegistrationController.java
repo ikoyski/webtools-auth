@@ -52,9 +52,9 @@ public class McpClientRegistrationController {
             "https://claude.com/api/mcp/auth_callback",
             "https://www.cursor.com/agents/mcp/oauth/callback",
             "http://localhost:8787/callback");
-    private static final Set<String> ALLOWED_GRANT_TYPES = Set.of("authorization_code", "refresh_token");
-    private static final Set<String> KANBAN_SCOPES = Set.of("kanban.read", "kanban.write", "offline_access");
-    private static final Set<String> HOMELAB_SCOPES = Set.of("homelab.read", "offline_access");
+    private static final Set<String> ALLOWED_GRANT_TYPES = Set.of("authorization_code");
+    private static final Set<String> KANBAN_SCOPES = Set.of("kanban.read", "kanban.write");
+    private static final Set<String> HOMELAB_SCOPES = Set.of("homelab.read");
 
     private final RegisteredClientRepository clients;
     private final PasswordEncoder passwordEncoder;
@@ -156,7 +156,7 @@ public class McpClientRegistrationController {
         Set<String> grantTypeSet = new LinkedHashSet<>(grantTypes);
         if (!grantTypeSet.contains(AuthorizationGrantType.AUTHORIZATION_CODE.getValue())
                 || !ALLOWED_GRANT_TYPES.containsAll(grantTypeSet)) {
-            throw new IllegalArgumentException("Only authorization_code and optional refresh_token grants are supported");
+            throw new IllegalArgumentException("Only the authorization_code grant is supported");
         }
 
         List<String> responseTypes = stringList(request.get("response_types"), "response_types", List.of("code"));
@@ -201,11 +201,7 @@ public class McpClientRegistrationController {
         if (!homelabClient && (mcpResource.isBlank() || mcpBackendResource.isBlank())) {
             throw new IllegalArgumentException("Kanban MCP resource audiences are not configured");
         }
-        if (scopes.contains("offline_access") && !grantTypeSet.contains(AuthorizationGrantType.REFRESH_TOKEN.getValue())) {
-            throw new IllegalArgumentException("offline_access requires the refresh_token grant");
-        }
-
-        String clientId = UUID.randomUUID().toString();
+                String clientId = UUID.randomUUID().toString();
         Instant issuedAt = Instant.now();
         String clientSecret = confidentialGrokClient ? generateClientSecret() : null;
 
@@ -232,8 +228,6 @@ public class McpClientRegistrationController {
                 .tokenSettings(TokenSettings.builder()
                         .accessTokenFormat(OAuth2TokenFormat.SELF_CONTAINED)
                         .accessTokenTimeToLive(Duration.ofHours(1))
-                        .refreshTokenTimeToLive(Duration.ofDays(30))
-                        .reuseRefreshTokens(false)
                         .build());
 
         if (clientSecret != null) {
