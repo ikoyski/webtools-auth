@@ -45,10 +45,10 @@ class McpClientRegistrationControllerTest {
         Map<String, Object> request = Map.of(
                 "client_name", "Cursor",
                 "redirect_uris", List.of("https://www.cursor.com/agents/mcp/oauth/callback"),
-                "grant_types", List.of("authorization_code", "refresh_token"),
+                "grant_types", List.of("authorization_code"),
                 "response_types", List.of("code"),
                 "token_endpoint_auth_method", "none",
-                "scope", "kanban.read kanban.write offline_access");
+                "scope", "kanban.read kanban.write");
 
         ResponseEntity<Map<String, Object>> response = controller.register(request);
 
@@ -64,8 +64,8 @@ class McpClientRegistrationControllerTest {
         assertEquals(ClientAuthenticationMethod.NONE, registered.getClientAuthenticationMethods().iterator().next());
         assertTrue(registered.getClientSettings().isRequireProofKey());
         assertTrue(registered.getClientSettings().isRequireAuthorizationConsent());
-        assertEquals(Set.of("kanban.read", "kanban.write", "offline_access"), registered.getScopes());
-        assertTrue(registered.getAuthorizationGrantTypes().contains(AuthorizationGrantType.REFRESH_TOKEN));
+        assertEquals(Set.of("kanban.read", "kanban.write"), registered.getScopes());
+        assertEquals(Set.of(AuthorizationGrantType.AUTHORIZATION_CODE), registered.getAuthorizationGrantTypes());
         assertEquals(Set.of("https://www.cursor.com/agents/mcp/oauth/callback"), registered.getRedirectUris());
         assertEquals(MCP_RESOURCE, registered.getClientSettings().getSetting(ClientSeeder.MCP_RESOURCE_SETTING));
         assertEquals(BACKEND_RESOURCE,
@@ -78,10 +78,10 @@ class McpClientRegistrationControllerTest {
         Map<String, Object> request = Map.of(
                 "client_name", "Grok Kanban",
                 "redirect_uris", List.of("https://grok.com/connectors-oauth-exchange-code/"),
-                "grant_types", List.of("authorization_code", "refresh_token"),
+                "grant_types", List.of("authorization_code"),
                 "response_types", List.of("code"),
                 "token_endpoint_auth_method", "client_secret_post",
-                "scope", "kanban.read kanban.write offline_access");
+                "scope", "kanban.read kanban.write");
 
         ResponseEntity<Map<String, Object>> response = controller.register(request);
 
@@ -101,7 +101,7 @@ class McpClientRegistrationControllerTest {
         assertTrue(passwordEncoder.matches(clientSecret, registered.getClientSecret()));
         assertTrue(registered.getClientSettings().isRequireProofKey());
         assertTrue(registered.getClientSettings().isRequireAuthorizationConsent());
-        assertEquals(Set.of("kanban.read", "kanban.write", "offline_access"), registered.getScopes());
+        assertEquals(Set.of("kanban.read", "kanban.write"), registered.getScopes());
     }
 
     @Test
@@ -125,6 +125,23 @@ class McpClientRegistrationControllerTest {
         assertEquals(HOMELAB_RESOURCE,
                 registered.getClientSettings().getSetting(ClientSeeder.MCP_RESOURCE_SETTING));
         assertNull(registered.getClientSettings().getSetting(ClientSeeder.MCP_BACKEND_RESOURCE_SETTING));
+    }
+
+
+    @Test
+    void rejectsRefreshTokenGrantAndOfflineAccessScope() {
+        McpClientRegistrationController controller = controller(true);
+        Map<String, Object> refreshGrantRequest = Map.of(
+                "redirect_uris", List.of("https://www.cursor.com/agents/mcp/oauth/callback"),
+                "grant_types", List.of("authorization_code", "refresh_token"),
+                "scope", "kanban.read");
+        Map<String, Object> offlineScopeRequest = Map.of(
+                "redirect_uris", List.of("https://www.cursor.com/agents/mcp/oauth/callback"),
+                "scope", "kanban.read offline_access");
+
+        assertEquals(HttpStatus.BAD_REQUEST, controller.register(refreshGrantRequest).getStatusCode());
+        assertEquals(HttpStatus.BAD_REQUEST, controller.register(offlineScopeRequest).getStatusCode());
+        verify(clients, never()).save(any());
     }
 
     @Test
