@@ -48,13 +48,15 @@ Keep the issuer stable and consistent with gateway and MCP JWT validation config
 
 ## Registered OAuth clients
 
-Clients are seeded/upserted by `ClientSeeder` at application startup from Config Server properties. Do not edit `oauth2_registered_client` manually.
+Pre-registered clients are seeded/upserted by `ClientSeeder` at application startup from Config Server properties. Grok and Cursor are created by the restricted DCR endpoint described below. Do not edit `oauth2_registered_client` manually.
 
 | Client | Purpose | Typical security model |
 |---|---|---|
 | Claude | MCP access | Configurable public or confidential client; PKCE |
 | ChatGPT | MCP access | Optional; PKCE; public without a secret, confidential with a secret |
 | Gemini | MCP access | Optional; PKCE; public without a secret, confidential with a secret |
+| Grok | MCP access | Restricted DCR; generated confidential-client secret; PKCE; exact callback allow-list |
+| Cursor | MCP access | Dynamic public client registration; PKCE; exact web/desktop callback allow-list |
 | Kanban web | Browser application | Public OIDC client with PKCE |
 | Additional first-party apps | Configured browser applications | One public OIDC client per app, PKCE and app-specific API audience |
 
@@ -66,12 +68,16 @@ Optional ChatGPT is seeded only when its client ID and at least one redirect URI
 
 - Register exact redirect URIs supplied by the OAuth client product. Never use wildcards.
 - For ChatGPT, use the exact callback URL shown in the connector setup UI. Depending on the integration flow, this may be a callback-specific URL rather than the stable `/connector_platform_oauth_redirect` URI. The server's authorization-response issuer-identification behavior must also match the callback requirements.
-- Gemini MCP uses a per-user callback under `https://oauth-redirect.googleusercontent.com/r/`. The auth server accepts only the Google redirect host and a `user_bound_custom-mcp-...` path whose final resource-host slug matches the configured MCP resource host. No per-user callback is stored in Config Server. The client seeder stores a reserved placeholder URI only because Spring requires a redirect URI on authorization-code client registrations; the Gemini validator never accepts that placeholder. This rule is limited to the Gemini client; every other client retains exact redirect URI matching.
+- Gemini MCP uses a per-user callback under `https://oauth-redirect.googleusercontent.com/r/`. The auth server validates the Google redirect host and callback path; no per-user callback is stored in Config Server. The client seeder stores a reserved placeholder URI because Spring requires a redirect URI on authorization-code client registrations; the Gemini validator never accepts that placeholder.
+- Grok custom MCP connectors use DCR with the observed callback `https://grok.com/connectors-oauth-exchange-code/`.
+- Cursor remote MCP uses DCR with the documented web callback `https://www.cursor.com/agents/mcp/oauth/callback` and desktop callback `http://localhost:8787/callback`.
+- DCR is exposed at `/oauth2/register` and advertised in authorization-server metadata only when `auth.mcp.client-registration.enabled=true`. It remains disabled by default in application code. The homelab integration-test configuration explicitly enables it; Render test enables it through the `webtools-auth-mcp.yaml` overlay and `public,mcp` profiles. Keep it disabled in deployments that are not actively testing Grok/Cursor.
+- DCR accepts only Authorization Code clients with PKCE, exact allow-listed callbacks, Kanban MCP scopes and fixed MCP plus backing API audiences. Cursor remains a public client (`none`). Grok alone may request `client_secret_post` with its exact callback; the server generates a high-entropy secret, stores only its password-encoded form and returns the secret once. Caller-supplied secrets, arbitrary redirects, unrelated scopes and arbitrary resource audiences are rejected.
 - Test the complete authorization-code flow with each product before enabling it for users.
 
 ## Config Server properties
 
-The identity server expects its issuer, database, federated-provider credentials, signing-key paths and OAuth client registrations to be supplied through external configuration.
+The identity server expects its issuer, database, federated-provider credentials, signing-key paths and OAuth client registrations to be supplied through external configuration. MCP Dynamic Client Registration is controlled by `auth.mcp.client-registration.enabled` and defaults to disabled in application code. The homelab's private/base configuration explicitly enables it for controlled Grok integration testing; Render test uses its separate `webtools-auth-mcp.yaml` overlay. Keep it disabled in environments where Grok/Cursor onboarding is not being tested.
 
 For GitHub sign-in, the Config Server provides the `spring.security.oauth2.client.registration.github` properties (`client-id`, `client-secret`, and scopes `read:user`, `user:email`). Keep the OAuth App secret in the private configuration/secret store, not in the frontend repository.
 
@@ -86,6 +92,9 @@ auth:
     mcp:
       resource: https://api.ikoyski.top/kanban-mcp/mcp
       backend-resource: https://api.ikoyski.top/kanban-backend
+      # Homelab integration testing only; leave false in production deployments.
+      client-registration:
+        enabled: true
     claude:
       # Existing Claude client configuration
     chatgpt:
@@ -171,6 +180,7 @@ The service is deployed separately from the API gateway. Restrict and rate-limit
 - Require exact audience and application-specific scopes at every resource server.
 - Keep OIDC enabled and retain the stable central UUID as the subject.
 - Keep client seeding idempotent and config-driven.
+- Keep open MCP Dynamic Client Registration disabled by default in application code. When explicitly enabled for testing, enforce the exact Grok/Cursor callback allow-list, PKCE, Kanban-only scopes and both MCP/backend audiences; only Grok's exact callback may use server-generated `client_secret_post` credentials.
 - Keep CORS allowed origins and logout redirect URLs as explicit lists; add each first-party app's exact origin and signed-out landing URL when onboarding it.
 - For OIDC, include `openid`; request standard `profile` / `email` scopes only when needed and validate ID tokens in the client.
 - Update README and `CLAUDE.md` when client registration, claims, login, key management or deployment behavior changes.
