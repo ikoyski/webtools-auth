@@ -213,6 +213,10 @@ public class McpClientRegistrationController {
                 .requireProofKey(true)
                 .requireAuthorizationConsent(true)
                 .setting(ClientSeeder.MCP_RESOURCE_SETTING, homelabClient ? homelabMcpResource : mcpResource);
+        if (!homelabClient) {
+            // Kanban retains its existing backend audience; Homelab must never inherit it.
+            clientSettingsBuilder.setting(ClientSeeder.MCP_BACKEND_RESOURCE_SETTING, mcpBackendResource);
+        }
         if (geminiDynamicRedirect) {
             clientSettingsBuilder.setting(ClientSeeder.GEMINI_DYNAMIC_REDIRECT_SETTING, true);
         }
