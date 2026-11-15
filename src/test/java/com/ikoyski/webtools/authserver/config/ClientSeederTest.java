@@ -1,7 +1,7 @@
 package com.ikoyski.webtools.authserver.config;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
-import static org.junit.jupiter.api.Assertions.assertNotNull;
+import static org.junit.jupiter.api.Assertions.assertFalse;
 import static org.junit.jupiter.api.Assertions.assertNull;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 import static org.mockito.ArgumentMatchers.anyString;
@@ -112,7 +112,7 @@ class ClientSeederTest {
         assertTrue(client.getClientSettings().isRequireAuthorizationConsent());
         assertHomelabResourceOnly(client);
         assertEquals(Duration.ofHours(1), client.getTokenSettings().getAccessTokenTimeToLive());
-        assertNull(client.getTokenSettings().getReuseRefreshTokens() ? "refresh tokens must not be enabled" : null);
+        assertFalse(client.getTokenSettings().isReuseRefreshTokens());
     }
 
     private static void assertHomelabResourceOnly(RegisteredClient client) {
