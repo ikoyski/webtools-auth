@@ -1,0 +1,288 @@
+package com.ikoyski.webtools.authserver.config;
+
+import java.security.SecureRandom;
+import java.time.Duration;
+import java.time.Instant;
+import java.util.ArrayList;
+import java.util.Base64;
+import java.util.LinkedHashMap;
+import java.util.LinkedHashSet;
+import java.util.List;
+import java.util.Map;
+import java.util.Set;
+import java.util.UUID;
+
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
+import org.springframework.beans.factory.annotation.Value;
+import org.springframework.http.CacheControl;
+import org.springframework.http.HttpStatus;
+import org.springframework.http.MediaType;
+import org.springframework.http.ResponseEntity;
+import org.springframework.security.crypto.password.PasswordEncoder;
+import org.springframework.security.oauth2.core.AuthorizationGrantType;
+import org.springframework.security.oauth2.core.ClientAuthenticationMethod;
+import org.springframework.security.oauth2.server.authorization.client.RegisteredClient;
+import org.springframework.security.oauth2.server.authorization.client.RegisteredClientRepository;
+import org.springframework.security.oauth2.server.authorization.settings.ClientSettings;
+import org.springframework.security.oauth2.server.authorization.settings.OAuth2TokenFormat;
+import org.springframework.security.oauth2.server.authorization.settings.TokenSettings;
+import org.springframework.web.bind.annotation.PostMapping;
+import org.springframework.web.bind.annotation.RequestBody;
+import org.springframework.web.bind.annotation.RestController;
+
+/**
+ * Narrow RFC 7591 registration endpoint for remote MCP clients.
+ *
+ * Registration is disabled by default and is enabled only in the Render test profile.
+ * Cursor uses public Authorization Code + PKCE. Grok's observed DCR request uses
+ * client_secret_post, so Grok receives a generated confidential-client secret. Both
+ * clients remain restricted to exact callback URIs and the Kanban MCP scopes/audiences.
+ */
+@RestController
+public class McpClientRegistrationController {
+
+    private static final Logger log = LoggerFactory.getLogger(McpClientRegistrationController.class);
+    private static final SecureRandom SECURE_RANDOM = new SecureRandom();
+
+    private static final String GROK_REDIRECT_URI = "https://grok.com/connectors-oauth-exchange-code/";
+    private static final Set<String> ALLOWED_REDIRECT_URIS = Set.of(
+            GROK_REDIRECT_URI,
+            "https://www.cursor.com/agents/mcp/oauth/callback",
+            "http://localhost:8787/callback");
+    private static final Set<String> ALLOWED_GRANT_TYPES = Set.of("authorization_code", "refresh_token");
+    private static final Set<String> ALLOWED_SCOPES = Set.of("kanban.read", "kanban.write", "offline_access");
+
+    private final RegisteredClientRepository clients;
+    private final PasswordEncoder passwordEncoder;
+    private final boolean enabled;
+    private final String mcpResource;
+    private final String mcpBackendResource;
+
+    public McpClientRegistrationController(
+            RegisteredClientRepository clients,
+            PasswordEncoder passwordEncoder,
+            @Value("${auth.mcp.client-registration.enabled:false}") boolean enabled,
+            @Value("${auth.client.mcp.resource:}") String mcpResource,
+            @Value("${auth.client.mcp.backend-resource:${auth.client.web.resource-uri:}}") String mcpBackendResource) {
+        this.clients = clients;
+        this.passwordEncoder = passwordEncoder;
+        this.enabled = enabled;
+        this.mcpResource = mcpResource == null ? "" : mcpResource.trim();
+        this.mcpBackendResource = mcpBackendResource == null ? "" : mcpBackendResource.trim();
+    }
+
+    @PostMapping(path = "/oauth2/register", consumes = MediaType.APPLICATION_JSON_VALUE,
+            produces = MediaType.APPLICATION_JSON_VALUE)
+    public ResponseEntity<Map<String, Object>> register(@RequestBody Map<String, Object> request) {
+        if (!enabled) {
+            return ResponseEntity.notFound().build();
+        }
+        if (mcpResource.isBlank() || mcpBackendResource.isBlank()) {
+            return error(HttpStatus.SERVICE_UNAVAILABLE, "server_error",
+                    "MCP resource audiences are not configured");
+        }
+
+        try {
+            return createClient(request);
+        } catch (IllegalArgumentException ex) {
+            // Log only fixed diagnostic categories. Never log submitted metadata,
+            // client names, redirect URIs, scope values, secrets, or exception messages.
+            String reason = rejectionReason(ex.getMessage());
+            if ("unsupported_token_endpoint_auth_method".equals(reason)) {
+                Object submittedMethod = request == null ? null : request.get("token_endpoint_auth_method");
+                log.warn("mcp_client_registration_rejected reason={} auth_method_category={}",
+                        reason, authenticationMethodCategory(submittedMethod));
+            } else {
+                log.warn("mcp_client_registration_rejected reason={}", reason);
+            }
+            return error(HttpStatus.BAD_REQUEST, "invalid_client_metadata", ex.getMessage());
+        }
+    }
+
+    static String authenticationMethodCategory(Object value) {
+        if (value == null) return "omitted";
+        if (!(value instanceof String method)) return "invalid_type";
+        return switch (method) {
+            case "none" -> "none";
+            case "client_secret_basic" -> "client_secret_basic";
+            case "client_secret_post" -> "client_secret_post";
+            case "client_secret_jwt" -> "client_secret_jwt";
+            case "private_key_jwt" -> "private_key_jwt";
+            case "tls_client_auth" -> "tls_client_auth";
+            case "self_signed_tls_client_auth" -> "self_signed_tls_client_auth";
+            default -> "other";
+        };
+    }
+
+    private static String rejectionReason(String message) {
+        if (message == null) return "invalid_metadata";
+        if (message.contains("JSON client registration request")) return "missing_request";
+        if (message.contains("public MCP clients")) return "client_secret_not_allowed";
+        if (message.startsWith("redirect_uris")) return "invalid_redirect_uris";
+        if (message.contains("grant")) return "unsupported_grant_types";
+        if (message.contains("response type")) return "unsupported_response_types";
+        if (message.contains("token_endpoint_auth_method")) return "unsupported_token_endpoint_auth_method";
+        if (message.startsWith("client_name")) return "invalid_client_name";
+        if (message.startsWith("Requested scope")) return "unsupported_scope";
+        if (message.contains("kanban.read")) return "required_scope_missing";
+        if (message.contains("Client registration string fields")) return "invalid_string_field_type";
+        if (message.contains("must be an array of strings")) return "invalid_array_field";
+        if (message.contains("must contain only non-empty strings")) return "invalid_array_item";
+        return "invalid_metadata";
+    }
+
+    private ResponseEntity<Map<String, Object>> createClient(Map<String, Object> request) {
+        if (request == null) {
+            throw new IllegalArgumentException("A JSON client registration request is required");
+        }
+        if (request.containsKey("client_secret")) {
+            throw new IllegalArgumentException("Client secrets must be generated by the authorization server");
+        }
+
+        List<String> redirectUris = stringList(request.get("redirect_uris"), "redirect_uris", List.of());
+        if (redirectUris.isEmpty() || redirectUris.size() > ALLOWED_REDIRECT_URIS.size()
+                || new LinkedHashSet<>(redirectUris).size() != redirectUris.size()
+                || !ALLOWED_REDIRECT_URIS.containsAll(redirectUris)) {
+            throw new IllegalArgumentException("redirect_uris must contain only the approved Grok or Cursor callback URLs");
+        }
+
+        List<String> grantTypes = stringList(request.get("grant_types"), "grant_types",
+                List.of(AuthorizationGrantType.AUTHORIZATION_CODE.getValue()));
+        Set<String> grantTypeSet = new LinkedHashSet<>(grantTypes);
+        if (!grantTypeSet.contains(AuthorizationGrantType.AUTHORIZATION_CODE.getValue())
+                || !ALLOWED_GRANT_TYPES.containsAll(grantTypeSet)) {
+            throw new IllegalArgumentException("Only authorization_code and optional refresh_token grants are supported");
+        }
+
+        List<String> responseTypes = stringList(request.get("response_types"), "response_types", List.of("code"));
+        if (!Set.of("code").equals(new LinkedHashSet<>(responseTypes))) {
+            throw new IllegalArgumentException("Only the code response type is supported");
+        }
+
+        String authenticationMethod = optionalString(request.get("token_endpoint_auth_method"), "none");
+        boolean confidentialGrokClient = "client_secret_post".equals(authenticationMethod);
+        if (!"none".equals(authenticationMethod) && !confidentialGrokClient) {
+            throw new IllegalArgumentException("MCP clients must use 'none' or the approved Grok 'client_secret_post' method");
+        }
+        if (confidentialGrokClient && !redirectUris.equals(List.of(GROK_REDIRECT_URI))) {
+            throw new IllegalArgumentException("client_secret_post is reserved for the exact Grok callback");
+        }
+
+        String clientName = optionalString(request.get("client_name"), "MCP client").trim();
+        if (!clientName.matches("[A-Za-z0-9 ._()\\-]{1,100}")) {
+            throw new IllegalArgumentException("client_name may contain only letters, numbers, spaces and basic punctuation (maximum 100 characters)");
+        }
+
+        String scopeValue = optionalString(request.get("scope"), "kanban.read kanban.write").trim();
+        Set<String> scopes = new LinkedHashSet<>();
+        for (String scope : scopeValue.split("\\s+")) {
+            if (!scope.isBlank()) {
+                if (!ALLOWED_SCOPES.contains(scope)) {
+                    throw new IllegalArgumentException("Requested scope is not available to MCP clients: " + scope);
+                }
+                scopes.add(scope);
+            }
+        }
+        if (!scopes.contains("kanban.read")) {
+            throw new IllegalArgumentException("The kanban.read scope is required");
+        }
+        if (scopes.contains("offline_access") && !grantTypeSet.contains(AuthorizationGrantType.REFRESH_TOKEN.getValue())) {
+            throw new IllegalArgumentException("offline_access requires the refresh_token grant");
+        }
+
+        String clientId = UUID.randomUUID().toString();
+        Instant issuedAt = Instant.now();
+        String clientSecret = confidentialGrokClient ? generateClientSecret() : null;
+
+        RegisteredClient.Builder builder = RegisteredClient.withId(UUID.randomUUID().toString())
+                .clientId(clientId)
+                .clientIdIssuedAt(issuedAt)
+                .clientName(clientName)
+                .clientAuthenticationMethod(confidentialGrokClient
+                        ? ClientAuthenticationMethod.CLIENT_SECRET_POST : ClientAuthenticationMethod.NONE)
+                .authorizationGrantType(AuthorizationGrantType.AUTHORIZATION_CODE)
+                .clientSettings(ClientSettings.builder()
+                        .requireProofKey(true)
+                        .requireAuthorizationConsent(true)
+                        .setting(ClientSeeder.MCP_RESOURCE_SETTING, mcpResource)
+                        .setting(ClientSeeder.MCP_BACKEND_RESOURCE_SETTING, mcpBackendResource)
+                        .build())
+                .tokenSettings(TokenSettings.builder()
+                        .accessTokenFormat(OAuth2TokenFormat.SELF_CONTAINED)
+                        .accessTokenTimeToLive(Duration.ofHours(1))
+                        .refreshTokenTimeToLive(Duration.ofDays(30))
+                        .reuseRefreshTokens(false)
+                        .build());
+
+        if (clientSecret != null) {
+            builder.clientSecret(passwordEncoder.encode(clientSecret));
+        }
+        if (grantTypeSet.contains(AuthorizationGrantType.REFRESH_TOKEN.getValue())) {
+            builder.authorizationGrantType(AuthorizationGrantType.REFRESH_TOKEN);
+        }
+        redirectUris.forEach(builder::redirectUri);
+        scopes.forEach(builder::scope);
+
+        clients.save(builder.build());
+
+        Map<String, Object> response = new LinkedHashMap<>();
+        response.put("client_id", clientId);
+        response.put("client_id_issued_at", issuedAt.getEpochSecond());
+        response.put("client_name", clientName);
+        response.put("redirect_uris", redirectUris);
+        response.put("grant_types", new ArrayList<>(grantTypeSet));
+        response.put("response_types", List.of("code"));
+        response.put("token_endpoint_auth_method", authenticationMethod);
+        response.put("scope", String.join(" ", scopes));
+        if (clientSecret != null) {
+            // RFC 7591: return the generated secret once; zero means it does not expire.
+            response.put("client_secret", clientSecret);
+            response.put("client_secret_expires_at", 0);
+        }
+
+        return ResponseEntity.status(HttpStatus.CREATED)
+                .cacheControl(CacheControl.noStore())
+                .body(response);
+    }
+
+    private static String generateClientSecret() {
+        byte[] secret = new byte[32];
+        SECURE_RANDOM.nextBytes(secret);
+        return Base64.getUrlEncoder().withoutPadding().encodeToString(secret);
+    }
+
+    private static List<String> stringList(Object value, String field, List<String> defaultValue) {
+        if (value == null) {
+            return defaultValue;
+        }
+        if (!(value instanceof List<?> values)) {
+            throw new IllegalArgumentException(field + " must be an array of strings");
+        }
+        List<String> result = new ArrayList<>();
+        for (Object item : values) {
+            if (!(item instanceof String string) || string.isBlank()) {
+                throw new IllegalArgumentException(field + " must contain only non-empty strings");
+            }
+            result.add(string.trim());
+        }
+        return result;
+    }
+
+    private static String optionalString(Object value, String defaultValue) {
+        if (value == null) {
+            return defaultValue;
+        }
+        if (!(value instanceof String string)) {
+            throw new IllegalArgumentException("Client registration string fields must be strings");
+        }
+        return string;
+    }
+
+    private static ResponseEntity<Map<String, Object>> error(
+            HttpStatus status, String error, String description) {
+        return ResponseEntity.status(status)
+                .cacheControl(CacheControl.noStore())
+                .body(Map.of("error", error, "error_description", description));
+    }
+}
