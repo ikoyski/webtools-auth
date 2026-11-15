@@ -108,7 +108,7 @@ public class ClientSeeder implements ApplicationRunner {
         boolean confidential = !isBlank(claudeClientSecret);
         if (!confidential) {
             log.warn("auth.client.claude.client-secret is not set: registering '{}' as a PUBLIC client. "
-                    + "No refresh tokens will be issued, so the connector must sign in again whenever its access token expires.",
+                    + "Refresh tokens are disabled for MCP clients, so the connector must sign in again whenever its access token expires.",
                     claudeClientId);
         }
 
@@ -119,10 +119,7 @@ public class ClientSeeder implements ApplicationRunner {
                 .tokenSettings(TokenSettings.builder()
                         .accessTokenFormat(OAuth2TokenFormat.SELF_CONTAINED)
                         .accessTokenTimeToLive(Duration.ofHours(1))
-                        .refreshTokenTimeToLive(Duration.ofDays(30))
-                        .reuseRefreshTokens(false)
                         .build());
-        builder.authorizationGrantType(AuthorizationGrantType.REFRESH_TOKEN);
         if (confidential) {
             builder.clientSecret(passwordEncoder.encode(claudeClientSecret))
                     .clientAuthenticationMethod(ClientAuthenticationMethod.CLIENT_SECRET_BASIC)
@@ -214,16 +211,12 @@ public class ClientSeeder implements ApplicationRunner {
                 .scope("kanban.read")
                 .scope("kanban.write")
                 .clientSettings(mcpClientSettings(true, geminiDynamicRedirect))
-                .tokenSettings(confidential
-                        ? tokenSettings.refreshTokenTimeToLive(Duration.ofDays(30)).reuseRefreshTokens(false).build()
-                        : tokenSettings.build());
+                .tokenSettings(tokenSettings.build());
 
         if (confidential) {
-            builder.scope("offline_access")
-                    .clientSecret(passwordEncoder.encode(clientSecret))
+            .clientSecret(passwordEncoder.encode(clientSecret))
                     .clientAuthenticationMethod(ClientAuthenticationMethod.CLIENT_SECRET_BASIC)
-                    .clientAuthenticationMethod(ClientAuthenticationMethod.CLIENT_SECRET_POST)
-                    .authorizationGrantType(AuthorizationGrantType.REFRESH_TOKEN);
+                    .clientAuthenticationMethod(ClientAuthenticationMethod.CLIENT_SECRET_POST);
         } else {
             builder.clientAuthenticationMethod(ClientAuthenticationMethod.NONE);
         }
