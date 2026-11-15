@@ -21,6 +21,7 @@ import org.junit.jupiter.api.extension.ExtendWith;
 import org.mockito.ArgumentCaptor;
 import org.mockito.Mock;
 import org.mockito.junit.jupiter.MockitoExtension;
+import org.springframework.mock.env.MockEnvironment;
 import org.springframework.boot.DefaultApplicationArguments;
 import org.springframework.security.crypto.bcrypt.BCryptPasswordEncoder;
 import org.springframework.security.crypto.password.PasswordEncoder;
@@ -57,7 +58,8 @@ class ClientSeederTest {
 
         assertEquals(Set.of("homelab-claude", "homelab-gemini", "homelab-grok"), registered.keySet());
         assertPublicHomelabClient(registered.get("homelab-claude"));
-        assertEquals(Set.of(CLAUDE_CALLBACK), registered.get("homelab-claude").getRedirectUris());
+        assertEquals(Set.of(CLAUDE_CALLBACK, "https://claude.com/api/mcp/auth_callback"),
+                registered.get("homelab-claude").getRedirectUris());
 
         RegisteredClient gemini = registered.get("homelab-gemini");
         assertPublicHomelabClient(gemini);
@@ -91,21 +93,30 @@ class ClientSeederTest {
     @Test
     void seedsKanbanClientsWithKanbanAudiencesAndKeepsWebClientSeparate() throws Exception {
         when(clients.findByClientId(anyString())).thenReturn(null);
+        MockEnvironment environment = new MockEnvironment()
+                .withProperty("auth.clients.kanban-claude.redirect-uris[0]", CLAUDE_CALLBACK)
+                .withProperty("auth.clients.kanban-web.redirect-uris[0]",
+                        "https://pages.ikoyski.top/kanban/kanban.html")
+                .withProperty("auth.clients.kanban-chatgpt.redirect-uris[0]",
+                        "https://chatgpt.com/connector_platform_oauth_redirect")
+                .withProperty("auth.clients.homelab-claude.redirect-uris[0]", CLAUDE_CALLBACK)
+                .withProperty("auth.clients.homelab-grok.redirect-uris[0]", GROK_CALLBACK);
         ClientSeeder seeder = new ClientSeeder(
                 clients,
                 passwordEncoder,
-                "kanban-claude", "", List.of(CLAUDE_CALLBACK),
-                "kanban-web", List.of("https://pages.ikoyski.top/kanban/kanban.html"),
+                "kanban-claude", "",
+                "kanban-web",
                 Duration.ofHours(8), "https://api.ikoyski.top/kanban-backend",
                 new ApplicationClientProperties(),
+                environment,
                 "https://api.ikoyski.top/kanban-mcp/mcp",
                 "https://api.ikoyski.top/kanban-backend",
-                "kanban-chatgpt", "", List.of("https://chatgpt.com/connector_platform_oauth_redirect"),
-                "kanban-gemini", "", List.of(),
+                "kanban-chatgpt", "",
+                "kanban-gemini", "",
                 HOMELAB_RESOURCE,
-                "homelab-claude", List.of(CLAUDE_CALLBACK),
-                "homelab-gemini", List.of(),
-                "homelab-grok", "", List.of(GROK_CALLBACK));
+                "homelab-claude",
+                "homelab-gemini",
+                "homelab-grok", "");
 
         seeder.run(new DefaultApplicationArguments());
 
@@ -135,19 +146,26 @@ class ClientSeederTest {
     }
 
     private ClientSeeder seeder(String grokSecret) {
+        MockEnvironment environment = new MockEnvironment()
+                .withProperty("auth.clients.homelab-claude.redirect-uris[0]", CLAUDE_CALLBACK)
+                .withProperty("auth.clients.homelab-claude.redirect-uris[1]",
+                        "https://claude.com/api/mcp/auth_callback")
+                .withProperty("auth.clients.homelab-grok.redirect-uris[0]", GROK_CALLBACK);
         return new ClientSeeder(
                 clients,
                 passwordEncoder,
-                "", "", List.of(),
-                "", List.of(), Duration.ofHours(8), "",
-                new ApplicationClientProperties(),
                 "", "",
-                "", "", List.of(),
-                "", "", List.of(),
+                "",
+                Duration.ofHours(8), "",
+                new ApplicationClientProperties(),
+                environment,
+                "", "",
+                "", "",
+                "", "",
                 HOMELAB_RESOURCE,
-                "homelab-claude", List.of(CLAUDE_CALLBACK),
-                "homelab-gemini", List.of(),
-                "homelab-grok", grokSecret, List.of(GROK_CALLBACK));
+                "homelab-claude",
+                "homelab-gemini",
+                "homelab-grok", grokSecret);
     }
 
     private static void assertPublicHomelabClient(RegisteredClient client) {
