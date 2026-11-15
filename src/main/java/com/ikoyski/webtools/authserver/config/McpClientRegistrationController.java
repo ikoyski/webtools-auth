@@ -67,9 +67,9 @@ public class McpClientRegistrationController {
             RegisteredClientRepository clients,
             PasswordEncoder passwordEncoder,
             @Value("${auth.mcp.client-registration.enabled:false}") boolean enabled,
-            @Value("${auth.client.mcp.resource:}") String mcpResource,
-            @Value("${auth.client.mcp.backend-resource:${auth.client.web.resource-uri:}}") String mcpBackendResource,
-            @Value("${auth.client.homelab-mcp.resource:}") String homelabMcpResource) {
+            @Value("${auth.resources.kanban-mcp.resource:}") String mcpResource,
+            @Value("${auth.resources.kanban-mcp.backend-resource:}") String mcpBackendResource,
+            @Value("${auth.resources.homelab-mcp.resource:}") String homelabMcpResource) {
         this.clients = clients;
         this.passwordEncoder = passwordEncoder;
         this.enabled = enabled;
