@@ -52,6 +52,8 @@ public class SecurityConfig {
                     endpoint.authorizationServerMetadataCustomizer(metadata -> {
                         metadata.claim("registration_endpoint", issuer + "/oauth2/register");
                         metadata.claim("scopes_supported", List.of("kanban.read", "kanban.write", "offline_access"));
+                        metadata.claim("token_endpoint_auth_methods_supported",
+                                List.of("none", "client_secret_post"));
                     }));
         }
         authorizationServerConfigurer.authorizationEndpoint(endpoint ->
