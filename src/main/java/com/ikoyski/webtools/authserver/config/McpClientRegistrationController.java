@@ -80,9 +80,30 @@ public class McpClientRegistrationController {
             // Log only a fixed diagnostic category. Never log submitted metadata,
             // client names, redirect URIs, scope values, or exception messages.
             String reason = rejectionReason(ex.getMessage());
-            log.warn("mcp_client_registration_rejected reason={}", reason);
+            if ("unsupported_token_endpoint_auth_method".equals(reason)) {
+                Object submittedMethod = request == null ? null : request.get("token_endpoint_auth_method");
+                log.warn("mcp_client_registration_rejected reason={} auth_method_category={}",
+                        reason, authenticationMethodCategory(submittedMethod));
+            } else {
+                log.warn("mcp_client_registration_rejected reason={}", reason);
+            }
             return error(HttpStatus.BAD_REQUEST, "invalid_client_metadata", ex.getMessage());
         }
+    }
+
+    static String authenticationMethodCategory(Object value) {
+        if (value == null) return "omitted";
+        if (!(value instanceof String method)) return "invalid_type";
+        return switch (method) {
+            case "none" -> "none";
+            case "client_secret_basic" -> "client_secret_basic";
+            case "client_secret_post" -> "client_secret_post";
+            case "client_secret_jwt" -> "client_secret_jwt";
+            case "private_key_jwt" -> "private_key_jwt";
+            case "tls_client_auth" -> "tls_client_auth";
+            case "self_signed_tls_client_auth" -> "self_signed_tls_client_auth";
+            default -> "other";
+        };
     }
 
     private static String rejectionReason(String message) {
