@@ -48,11 +48,14 @@ Keep the issuer stable and consistent with gateway and MCP JWT validation config
 
 ## Registered OAuth clients
 
-Pre-registered clients are seeded/upserted by `ClientSeeder` at application startup from Config Server properties. Grok and Cursor are created by the restricted DCR endpoint described below. Do not edit `oauth2_registered_client` manually.
+Pre-registered clients are seeded/upserted by `ClientSeeder` at application startup from Config Server properties. Homelab MCP has stable provider-specific client IDs: `homelab-claude`, `homelab-gemini`, and `homelab-grok`. Kanban's Grok and Cursor integrations can still use the restricted DCR endpoint described below. Do not edit `oauth2_registered_client` manually.
 
 | Client | Purpose | Typical security model |
 |---|---|---|
 | Claude | MCP access | Configurable public or confidential client; PKCE |
+| Homelab Claude | Homelab MCP | `homelab-claude`; public PKCE client |
+| Homelab Gemini | Homelab MCP | `homelab-gemini`; public PKCE client; validated dynamic callback |
+| Homelab Grok | Homelab MCP | `homelab-grok`; confidential `client_secret_post` client; PKCE |
 | ChatGPT | MCP access | Optional; PKCE; public without a secret, confidential with a secret |
 | Gemini | MCP access | Optional; PKCE; public without a secret, confidential with a secret |
 | Grok | MCP access | Restricted DCR; generated confidential-client secret; PKCE; exact callback allow-list |
@@ -60,9 +63,9 @@ Pre-registered clients are seeded/upserted by `ClientSeeder` at application star
 | Kanban web | Browser application | Public OIDC client with PKCE |
 | Additional first-party apps | Configured browser applications | One public OIDC client per app, PKCE and app-specific API audience |
 
-MCP clients are assigned the configured MCP resource URI. The access-token customizer includes it in `aud` and also includes the backing Kanban API resource URI. Set `auth.client.mcp.backend-resource` explicitly, or it defaults to `auth.client.web.resource-uri` so that the MCP service can forward the same user's token through the gateway to the Kanban API. The Kanban web client itself receives only its API audience. Additional first-party browser clients are configured under `auth.clients.applications`; each requires its own exact redirect URI list, scopes and API `resource-uri`.
+Kanban MCP clients use `auth.client.mcp.resource` and also receive the backing Kanban API resource URI in `aud`, because the Kanban MCP service forwards the delegated token to that API. Homelab MCP clients use only `auth.client.homelab-mcp.resource`; they never receive the Kanban backend audience. The Kanban web client itself receives only its API audience. Additional first-party browser clients are configured under `auth.clients.applications`; each requires its own exact redirect URI list, scopes and API `resource-uri`.
 
-Optional ChatGPT is seeded only when its client ID and at least one redirect URI are configured. Gemini is seeded when its client ID and MCP resource are configured; its redirect-uris list may be empty because Gemini supplies a user-bound callback at authorization time. A configured secret enables confidential-client authentication, but MCP clients do not receive refresh-token grants. MCP access tokens expire after one hour; clients must run a new authorization flow when they expire. The Kanban browser client retains its separately configured eight-hour access-token lifetime.
+Optional ChatGPT is seeded only when its client ID and at least one redirect URI are configured. The named Homelab Claude and Gemini clients are seeded with defaults `homelab-claude` and `homelab-gemini`; Gemini's redirect-uris list is empty because Google supplies a user-bound callback at authorization time. The named Homelab Grok client defaults to `homelab-grok` and is seeded only when `auth.client.homelab-mcp.grok.client-secret` (or `AUTH_HOMELAB_GROK_CLIENT_SECRET`) is configured. Grok's secret is password-encoded in the registered-client database. All MCP clients require PKCE and have one-hour access tokens with no refresh-token grant. The Kanban browser client retains its separately configured eight-hour access-token lifetime.
 
 ### Redirect URI rules
 
@@ -72,8 +75,32 @@ Optional ChatGPT is seeded only when its client ID and at least one redirect URI
 - Grok custom MCP connectors use DCR with the observed callback `https://grok.com/connectors-oauth-exchange-code/`.
 - Cursor remote MCP uses DCR with the documented web callback `https://www.cursor.com/agents/mcp/oauth/callback` and desktop callback `http://localhost:8787/callback`.
 - DCR is exposed at `/oauth2/register` and advertised in authorization-server metadata only when `auth.mcp.client-registration.enabled=true`. It remains disabled by default in application code. The homelab integration-test configuration explicitly enables it; Render test enables it through the `webtools-auth-mcp.yaml` overlay and `public,mcp` profiles. Keep it disabled in deployments that are not actively testing Grok/Cursor.
-- DCR accepts only Authorization Code clients with PKCE, approved callbacks, and one application-specific scope family per client. Refresh-token grants and the `offline_access` scope are not supported for MCP clients. Kanban clients may request `kanban.read`/`kanban.write` and receive the Kanban MCP plus backing API audiences. Homelab clients may request `homelab.read` and receive only the Homelab MCP audience; mixed Kanban/Homelab scopes are rejected. Claude and Gemini callbacks are accepted alongside the existing Grok and Cursor callbacks. Cursor and Claude use public clients (`none`). Grok alone may request `client_secret_post` with its exact callback; the server generates a high-entropy secret, stores only its password-encoded form and returns the secret once. Caller-supplied secrets, arbitrary redirects, unrelated scopes refresh-token grants, `offline_access`, and arbitrary resource audiences are rejected.
+- DCR accepts only Authorization Code clients with PKCE, approved callbacks, and one application-specific scope family per client. Refresh-token grants and the `offline_access` scope are not supported for MCP clients. Kanban clients may request `kanban.read`/`kanban.write` and receive the Kanban MCP plus backing API audiences. Homelab clients may request `homelab.read` and receive only the Homelab MCP audience; mixed Kanban/Homelab scopes are rejected. Claude and Gemini callbacks are accepted alongside the existing Grok and Cursor callbacks. Cursor and Claude use public clients (`none`). DCR Grok clients may use `client_secret_post` with the exact Grok callback; the server generates a high-entropy secret, stores only its password-encoded form and returns the secret once. Caller-supplied secrets, arbitrary redirects, unrelated scopes, refresh-token grants, `offline_access`, and arbitrary resource audiences are rejected. The named Homelab clients are pre-registered separately and do not depend on DCR.
 - Test the complete authorization-code flow with each product before enabling it for users.
+
+## Named Homelab MCP OAuth clients
+
+```yaml
+auth:
+  client:
+    homelab-mcp:
+      resource: https://homelab-mcp.ikoyski.top/mcp
+      claude:
+        client-id: homelab-claude
+        redirect-uris:
+          - https://claude.ai/api/mcp/auth_callback
+          - https://claude.com/api/mcp/auth_callback
+      gemini:
+        client-id: homelab-gemini
+        redirect-uris: []
+      grok:
+        client-id: homelab-grok
+        client-secret: ${AUTH_HOMELAB_GROK_CLIENT_SECRET:}
+        redirect-uris:
+          - https://grok.com/connectors-oauth-exchange-code/
+```
+
+Set `AUTH_HOMELAB_GROK_CLIENT_SECRET` as a secret in the Auth Server runtime environment. Do not commit the plaintext secret. Claude and Gemini are public PKCE clients and do not need a client secret. Gemini's registered redirect placeholder is validated using that specific client's Homelab resource audience.
 
 ## Config Server properties
 
