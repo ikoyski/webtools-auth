@@ -214,7 +214,7 @@ public class ClientSeeder implements ApplicationRunner {
                 .tokenSettings(tokenSettings.build());
 
         if (confidential) {
-            .clientSecret(passwordEncoder.encode(clientSecret))
+            builder.clientSecret(passwordEncoder.encode(clientSecret))
                     .clientAuthenticationMethod(ClientAuthenticationMethod.CLIENT_SECRET_BASIC)
                     .clientAuthenticationMethod(ClientAuthenticationMethod.CLIENT_SECRET_POST);
         } else {
