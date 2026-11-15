@@ -9,6 +9,9 @@ import org.slf4j.LoggerFactory;
 import org.springframework.beans.factory.annotation.Value;
 import org.springframework.boot.ApplicationArguments;
 import org.springframework.boot.ApplicationRunner;
+import org.springframework.boot.context.properties.bind.Bindable;
+import org.springframework.boot.context.properties.bind.Binder;
+import org.springframework.core.env.Environment;
 import org.springframework.security.crypto.password.PasswordEncoder;
 import org.springframework.security.oauth2.core.AuthorizationGrantType;
 import org.springframework.security.oauth2.core.ClientAuthenticationMethod;
@@ -61,35 +64,29 @@ public class ClientSeeder implements ApplicationRunner {
                         PasswordEncoder passwordEncoder,
                         @Value("${auth.clients.kanban-claude.client-id}") String claudeClientId,
                         @Value("${auth.clients.kanban-claude.client-secret:}") String claudeClientSecret,
-                        @Value("${auth.clients.kanban-claude.redirect-uris}") List<String> claudeRedirectUris,
                         @Value("${auth.clients.kanban-web.client-id:}") String webClientId,
-                        @Value("${auth.clients.kanban-web.redirect-uris:}") List<String> webRedirectUris,
                         @Value("${auth.clients.kanban-web.access-token-ttl:PT8H}") Duration webAccessTokenTtl,
                         @Value("${auth.clients.kanban-web.resource:}") String webResourceUri,
                         ApplicationClientProperties applicationClients,
+                        Environment environment,
                         @Value("${auth.resources.kanban-mcp.resource:}") String mcpResource,
                         @Value("${auth.resources.kanban-mcp.backend-resource:}") String mcpBackendResource,
                         @Value("${auth.clients.kanban-chatgpt.client-id:}") String chatgptClientId,
                         @Value("${auth.clients.kanban-chatgpt.client-secret:}") String chatgptClientSecret,
-                        @Value("${auth.clients.kanban-chatgpt.redirect-uris:}") List<String> chatgptRedirectUris,
                         @Value("${auth.clients.kanban-gemini.client-id:}") String geminiClientId,
                         @Value("${auth.clients.kanban-gemini.client-secret:}") String geminiClientSecret,
-                        @Value("${auth.clients.kanban-gemini.redirect-uris:}") List<String> geminiRedirectUris,
                         @Value("${auth.resources.homelab-mcp.resource:}") String homelabMcpResource,
                         @Value("${auth.clients.homelab-claude.client-id:homelab-claude}") String homelabClaudeClientId,
-                        @Value("${auth.clients.homelab-claude.redirect-uris:https://claude.ai/api/mcp/auth_callback,https://claude.com/api/mcp/auth_callback}") List<String> homelabClaudeRedirectUris,
                         @Value("${auth.clients.homelab-gemini.client-id:homelab-gemini}") String homelabGeminiClientId,
-                        @Value("${auth.clients.homelab-gemini.redirect-uris:}") List<String> homelabGeminiRedirectUris,
                         @Value("${auth.clients.homelab-grok.client-id:homelab-grok}") String homelabGrokClientId,
-                        @Value("${auth.clients.homelab-grok.client-secret:${AUTH_HOMELAB_GROK_CLIENT_SECRET:}}") String homelabGrokClientSecret,
-                        @Value("${auth.clients.homelab-grok.redirect-uris:https://grok.com/connectors-oauth-exchange-code/}") List<String> homelabGrokRedirectUris) {
+                        @Value("${auth.clients.homelab-grok.client-secret:${AUTH_HOMELAB_GROK_CLIENT_SECRET:}}") String homelabGrokClientSecret) {
         this.clients = clients;
         this.passwordEncoder = passwordEncoder;
         this.claudeClientId = claudeClientId;
         this.claudeClientSecret = claudeClientSecret;
-        this.claudeRedirectUris = claudeRedirectUris;
+        this.claudeRedirectUris = bindList(environment, "auth.clients.kanban-claude.redirect-uris");
         this.webClientId = webClientId;
-        this.webRedirectUris = webRedirectUris;
+        this.webRedirectUris = bindList(environment, "auth.clients.kanban-web.redirect-uris");
         this.webAccessTokenTtl = webAccessTokenTtl;
         this.webResourceUri = webResourceUri == null ? "" : webResourceUri.trim();
         this.applicationClients = applicationClients;
@@ -98,18 +95,18 @@ public class ClientSeeder implements ApplicationRunner {
                 ? this.webResourceUri : mcpBackendResource.trim();
         this.chatgptClientId = chatgptClientId;
         this.chatgptClientSecret = chatgptClientSecret;
-        this.chatgptRedirectUris = chatgptRedirectUris;
+        this.chatgptRedirectUris = bindList(environment, "auth.clients.kanban-chatgpt.redirect-uris");
         this.geminiClientId = geminiClientId;
         this.geminiClientSecret = geminiClientSecret;
-        this.geminiRedirectUris = geminiRedirectUris;
+        this.geminiRedirectUris = bindList(environment, "auth.clients.kanban-gemini.redirect-uris");
         this.homelabMcpResource = homelabMcpResource == null ? "" : homelabMcpResource.trim();
         this.homelabClaudeClientId = homelabClaudeClientId;
-        this.homelabClaudeRedirectUris = homelabClaudeRedirectUris;
+        this.homelabClaudeRedirectUris = bindList(environment, "auth.clients.homelab-claude.redirect-uris");
         this.homelabGeminiClientId = homelabGeminiClientId;
-        this.homelabGeminiRedirectUris = homelabGeminiRedirectUris;
+        this.homelabGeminiRedirectUris = bindList(environment, "auth.clients.homelab-gemini.redirect-uris");
         this.homelabGrokClientId = homelabGrokClientId;
         this.homelabGrokClientSecret = homelabGrokClientSecret;
-        this.homelabGrokRedirectUris = homelabGrokRedirectUris;
+        this.homelabGrokRedirectUris = bindList(environment, "auth.clients.homelab-grok.redirect-uris");
     }
 
     @Override
@@ -355,6 +352,13 @@ public class ClientSeeder implements ApplicationRunner {
         clients.save(client);
         log.info("Registered OAuth client '{}' ({})", client.getClientId(),
                 client.getClientAuthenticationMethods().contains(ClientAuthenticationMethod.NONE) ? "public" : "confidential");
+    }
+
+    private static List<String> bindList(Environment environment, String propertyName) {
+        // Config Server exposes YAML list entries as indexed keys; bind the collection as a whole.
+        return Binder.get(environment)
+                .bind(propertyName, Bindable.listOf(String.class))
+                .orElseGet(List::of);
     }
 
     private static List<String> clean(List<String> values) {
