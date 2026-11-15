@@ -32,6 +32,7 @@ class McpClientRegistrationControllerTest {
 
     private static final String MCP_RESOURCE = "https://api.example.test/kanban-mcp/mcp";
     private static final String BACKEND_RESOURCE = "https://api.example.test/kanban-backend";
+    private static final String HOMELAB_RESOURCE = "https://homelab-mcp.example.test/mcp";
 
     @Mock
     private RegisteredClientRepository clients;
@@ -101,6 +102,62 @@ class McpClientRegistrationControllerTest {
         assertTrue(registered.getClientSettings().isRequireProofKey());
         assertTrue(registered.getClientSettings().isRequireAuthorizationConsent());
         assertEquals(Set.of("kanban.read", "kanban.write", "offline_access"), registered.getScopes());
+    }
+
+    @Test
+    void registersHomelabClientWithOnlyTheHomelabAudience() {
+        McpClientRegistrationController controller = controller(true);
+        Map<String, Object> request = Map.of(
+                "client_name", "Homelab MCP",
+                "redirect_uris", List.of("https://claude.ai/api/mcp/auth_callback"),
+                "grant_types", List.of("authorization_code"),
+                "response_types", List.of("code"),
+                "token_endpoint_auth_method", "none",
+                "scope", "homelab.read");
+
+        ResponseEntity<Map<String, Object>> response = controller.register(request);
+
+        assertEquals(HttpStatus.CREATED, response.getStatusCode());
+        ArgumentCaptor<RegisteredClient> captor = ArgumentCaptor.forClass(RegisteredClient.class);
+        verify(clients).save(captor.capture());
+        RegisteredClient registered = captor.getValue();
+        assertEquals(Set.of("homelab.read"), registered.getScopes());
+        assertEquals(HOMELAB_RESOURCE,
+                registered.getClientSettings().getSetting(ClientSeeder.MCP_RESOURCE_SETTING));
+        assertNull(registered.getClientSettings().getSetting(ClientSeeder.MCP_BACKEND_RESOURCE_SETTING));
+    }
+
+    @Test
+    void rejectsMixedHomelabAndKanbanScopes() {
+        McpClientRegistrationController controller = controller(true);
+        Map<String, Object> request = Map.of(
+                "redirect_uris", List.of("https://claude.ai/api/mcp/auth_callback"),
+                "scope", "homelab.read kanban.read");
+
+        ResponseEntity<Map<String, Object>> response = controller.register(request);
+
+        assertEquals(HttpStatus.BAD_REQUEST, response.getStatusCode());
+        verify(clients, never()).save(any());
+    }
+
+    @Test
+    void registersGeminiHomelabCallbackAsDynamicRedirectClient() {
+        McpClientRegistrationController controller = controller(true);
+        Map<String, Object> request = Map.of(
+                "client_name", "Gemini Homelab",
+                "redirect_uris", List.of("https://oauth-redirect.googleusercontent.com/r/user_bound_custom-mcp-123"),
+                "scope", "homelab.read");
+
+        ResponseEntity<Map<String, Object>> response = controller.register(request);
+
+        assertEquals(HttpStatus.CREATED, response.getStatusCode());
+        ArgumentCaptor<RegisteredClient> captor = ArgumentCaptor.forClass(RegisteredClient.class);
+        verify(clients).save(captor.capture());
+        RegisteredClient registered = captor.getValue();
+        assertEquals(HOMELAB_RESOURCE,
+                registered.getClientSettings().getSetting(ClientSeeder.MCP_RESOURCE_SETTING));
+        assertEquals(Boolean.TRUE,
+                registered.getClientSettings().getSetting(ClientSeeder.GEMINI_DYNAMIC_REDIRECT_SETTING));
     }
 
     @Test
@@ -180,6 +237,6 @@ class McpClientRegistrationControllerTest {
 
     private McpClientRegistrationController controller(boolean enabled) {
         return new McpClientRegistrationController(
-                clients, passwordEncoder, enabled, MCP_RESOURCE, BACKEND_RESOURCE);
+                clients, passwordEncoder, enabled, MCP_RESOURCE, BACKEND_RESOURCE, HOMELAB_RESOURCE);
     }
 }
