@@ -37,7 +37,7 @@ Grok and Cursor use the restricted DCR endpoint at `/oauth2/register`, advertise
 - Cursor web: `https://www.cursor.com/agents/mcp/oauth/callback`
 - Cursor desktop: `http://localhost:8787/callback`
 
-Cursor remains a public client using `none`. Grok alone may use `client_secret_post` with its exact callback; generate its high-entropy secret server-side, store only the password-encoded value and return the secret once. Reject caller-supplied secrets, other redirect URIs, unsupported grants and scopes outside `kanban.read`, `kanban.write`, and optional `offline_access`. DCR-created clients must receive both configured MCP and backing Kanban API audiences. Do not enable DCR in production without explicit approval and a completed end-to-end review.
+Cursor remains a public client using `none`. Grok alone may use `client_secret_post` with its exact callback; generate its high-entropy secret server-side, store only the password-encoded value and return the secret once. Reject caller-supplied secrets, other redirect URIs, unsupported grants and scopes outside `kanban.read` and `kanban.write`. Refresh-token grants and `offline_access` are not supported; MCP access tokens expire after one hour and clients must reauthorize. DCR-created clients must receive both configured MCP and backing Kanban API audiences. Do not enable DCR in production without explicit approval and a completed end-to-end review.
 
 ## Federated identity providers
 
