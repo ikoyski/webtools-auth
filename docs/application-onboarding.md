@@ -102,6 +102,6 @@ If a service is directly reachable by untrusted clients, forwarded identity head
 
 ### Special case: delegated MCP clients
 
-A client whose service forwards the user's delegated access token to a second API needs both resource audiences. For Kanban MCP, configure the MCP resource and the backing Kanban API resource using `auth.client.mcp.resource` and `auth.client.mcp.backend-resource`. The Gateway's MCP route validates the MCP audience; the backing API route independently validates the Kanban API audience and Kanban scopes.
+A client whose service forwards the user's delegated access token to a second API needs both resource audiences. For Kanban MCP, configure the MCP resource and the backing Kanban API resource using `auth.resources.kanban-mcp.resource` and `auth.resources.kanban-mcp.backend-resource`. The Gateway's MCP route validates the MCP audience; the backing API route independently validates the Kanban API audience and Kanban scopes.
 
 Ordinary browser clients must receive only their own API audience.
