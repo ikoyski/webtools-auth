@@ -52,7 +52,8 @@ public class McpClientRegistrationController {
             "https://claude.com/api/mcp/auth_callback",
             "https://www.cursor.com/agents/mcp/oauth/callback",
             "http://localhost:8787/callback");
-    private static final Set<String> ALLOWED_GRANT_TYPES = Set.of("authorization_code");
+    private static final Set<String> ALLOWED_GRANT_TYPES = Set.of("authorization_code", "refresh_token");
+    private static final Duration MCP_REFRESH_TOKEN_TTL = Duration.ofDays(30);
     private static final Set<String> KANBAN_SCOPES = Set.of("kanban.read", "kanban.write");
     private static final Set<String> HOMELAB_SCOPES = Set.of("homelab.read");
 
@@ -184,7 +185,7 @@ public class McpClientRegistrationController {
         Set<String> grantTypeSet = new LinkedHashSet<>(grantTypes);
         if (!grantTypeSet.contains(AuthorizationGrantType.AUTHORIZATION_CODE.getValue())
                 || !ALLOWED_GRANT_TYPES.containsAll(grantTypeSet)) {
-            throw new IllegalArgumentException("Only the authorization_code grant is supported");
+            throw new IllegalArgumentException("Only authorization_code, optionally combined with refresh_token, is supported");
         }
 
         List<String> responseTypes = stringList(request.get("response_types"), "response_types", List.of("code"));
@@ -245,6 +246,14 @@ public class McpClientRegistrationController {
             clientSettingsBuilder.setting(ClientSeeder.GEMINI_DYNAMIC_REDIRECT_SETTING, true);
         }
 
+        TokenSettings.Builder tokenSettingsBuilder = TokenSettings.builder()
+                .accessTokenFormat(OAuth2TokenFormat.SELF_CONTAINED)
+                .accessTokenTimeToLive(Duration.ofHours(1));
+        if (grantTypeSet.contains(AuthorizationGrantType.REFRESH_TOKEN.getValue())) {
+            tokenSettingsBuilder.refreshTokenTimeToLive(MCP_REFRESH_TOKEN_TTL)
+                    .reuseRefreshTokens(false);
+        }
+
         RegisteredClient.Builder builder = RegisteredClient.withId(UUID.randomUUID().toString())
                 .clientId(clientId)
                 .clientIdIssuedAt(issuedAt)
@@ -253,10 +262,7 @@ public class McpClientRegistrationController {
                         ? ClientAuthenticationMethod.CLIENT_SECRET_POST : ClientAuthenticationMethod.NONE)
                 .authorizationGrantType(AuthorizationGrantType.AUTHORIZATION_CODE)
                 .clientSettings(clientSettingsBuilder.build())
-                .tokenSettings(TokenSettings.builder()
-                        .accessTokenFormat(OAuth2TokenFormat.SELF_CONTAINED)
-                        .accessTokenTimeToLive(Duration.ofHours(1))
-                        .build());
+                .tokenSettings(tokenSettingsBuilder.build());
 
         if (clientSecret != null) {
             builder.clientSecret(passwordEncoder.encode(clientSecret));
