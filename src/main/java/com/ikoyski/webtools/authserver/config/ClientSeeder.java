@@ -57,7 +57,6 @@ public class ClientSeeder implements ApplicationRunner {
     private final String homelabGeminiClientId;
     private final List<String> homelabGeminiRedirectUris;
     private final String homelabGrokClientId;
-    private final String homelabGrokClientSecret;
     private final List<String> homelabGrokRedirectUris;
 
     public ClientSeeder(RegisteredClientRepository clients,
@@ -78,8 +77,7 @@ public class ClientSeeder implements ApplicationRunner {
                         @Value("${auth.resources.homelab-mcp.resource:}") String homelabMcpResource,
                         @Value("${auth.clients.homelab-claude.client-id:homelab-claude}") String homelabClaudeClientId,
                         @Value("${auth.clients.homelab-gemini.client-id:homelab-gemini}") String homelabGeminiClientId,
-                        @Value("${auth.clients.homelab-grok.client-id:homelab-grok}") String homelabGrokClientId,
-                        @Value("${auth.clients.homelab-grok.client-secret:${AUTH_HOMELAB_GROK_CLIENT_SECRET:}}") String homelabGrokClientSecret) {
+                        @Value("${auth.clients.homelab-grok.client-id:homelab-grok}") String homelabGrokClientId) {
         this.clients = clients;
         this.passwordEncoder = passwordEncoder;
         this.claudeClientId = claudeClientId;
@@ -105,7 +103,6 @@ public class ClientSeeder implements ApplicationRunner {
         this.homelabGeminiClientId = homelabGeminiClientId;
         this.homelabGeminiRedirectUris = bindList(environment, "auth.clients.homelab-gemini.redirect-uris");
         this.homelabGrokClientId = homelabGrokClientId;
-        this.homelabGrokClientSecret = homelabGrokClientSecret;
         this.homelabGrokRedirectUris = bindList(environment, "auth.clients.homelab-grok.redirect-uris");
     }
 
@@ -140,14 +137,10 @@ public class ClientSeeder implements ApplicationRunner {
                 homelabGeminiClientId, "Homelab MCP - Gemini",
                 homelabGeminiRedirectUris, true, false, null);
 
-        if (isBlank(homelabGrokClientSecret)) {
-            log.warn("Skipping named Homelab Grok client '{}': configure auth.clients.homelab-grok.client-secret",
-                    homelabGrokClientId);
-        } else {
-            seedHomelabMcpClient(
-                    homelabGrokClientId, "Homelab MCP - Grok",
-                    homelabGrokRedirectUris, false, true, homelabGrokClientSecret);
-        }
+        // Grok uses a public OAuth client with PKCE; no client secret is required.
+        seedHomelabMcpClient(
+                homelabGrokClientId, "Homelab MCP - Grok",
+                homelabGrokRedirectUris, false, false, null);
     }
 
     private void seedHomelabMcpClient(
