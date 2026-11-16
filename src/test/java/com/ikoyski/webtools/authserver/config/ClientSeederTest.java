@@ -47,7 +47,7 @@ class ClientSeederTest {
     @Test
     void seedsStableHomelabClientsWithOnlyHomelabAudienceAndNoRefreshTokens() throws Exception {
         when(clients.findByClientId(anyString())).thenReturn(null);
-        ClientSeeder seeder = seeder("test-grok-client-secret");
+        ClientSeeder seeder = seeder();
 
         seeder.run(new DefaultApplicationArguments());
 
@@ -70,24 +70,14 @@ class ClientSeederTest {
         RegisteredClient grok = registered.get("homelab-grok");
         assertEquals(Set.of("homelab.read"), grok.getScopes());
         assertEquals(Set.of(AuthorizationGrantType.AUTHORIZATION_CODE), grok.getAuthorizationGrantTypes());
-        assertEquals(Set.of(ClientAuthenticationMethod.CLIENT_SECRET_POST),
+        assertEquals(Set.of(ClientAuthenticationMethod.NONE),
                 grok.getClientAuthenticationMethods());
-        assertTrue(passwordEncoder.matches("test-grok-client-secret", grok.getClientSecret()));
+        assertNull(grok.getClientSecret());
+        assertTrue(grok.getClientSettings().isRequireProofKey());
+        assertTrue(grok.getClientSettings().isRequireAuthorizationConsent());
+        assertFalse(grok.getTokenSettings().isReuseRefreshTokens());
         assertHomelabResourceOnly(grok);
         assertEquals(Duration.ofHours(1), grok.getTokenSettings().getAccessTokenTimeToLive());
-    }
-
-    @Test
-    void doesNotSeedGrokWhenItsSecretIsNotConfigured() throws Exception {
-        when(clients.findByClientId(anyString())).thenReturn(null);
-        ClientSeeder seeder = seeder("");
-
-        seeder.run(new DefaultApplicationArguments());
-
-        ArgumentCaptor<RegisteredClient> captor = ArgumentCaptor.forClass(RegisteredClient.class);
-        verify(clients, times(2)).save(captor.capture());
-        assertEquals(Set.of("homelab-claude", "homelab-gemini"),
-                captor.getAllValues().stream().map(RegisteredClient::getClientId).collect(Collectors.toSet()));
     }
 
     @Test
@@ -116,12 +106,12 @@ class ClientSeederTest {
                 HOMELAB_RESOURCE,
                 "homelab-claude",
                 "homelab-gemini",
-                "homelab-grok", "");
+                "homelab-grok");
 
         seeder.run(new DefaultApplicationArguments());
 
         ArgumentCaptor<RegisteredClient> captor = ArgumentCaptor.forClass(RegisteredClient.class);
-        verify(clients, times(6)).save(captor.capture());
+        verify(clients, times(7)).save(captor.capture());
         Map<String, RegisteredClient> registered = captor.getAllValues().stream()
                 .collect(Collectors.toMap(RegisteredClient::getClientId, Function.identity()));
 
@@ -145,7 +135,7 @@ class ClientSeederTest {
         assertEquals(Set.of(CLAUDE_CALLBACK), homelabClaude.getRedirectUris());
     }
 
-    private ClientSeeder seeder(String grokSecret) {
+    private ClientSeeder seeder() {
         MockEnvironment environment = new MockEnvironment()
                 .withProperty("auth.clients.homelab-claude.redirect-uris[0]", CLAUDE_CALLBACK)
                 .withProperty("auth.clients.homelab-claude.redirect-uris[1]",
@@ -165,7 +155,7 @@ class ClientSeederTest {
                 HOMELAB_RESOURCE,
                 "homelab-claude",
                 "homelab-gemini",
-                "homelab-grok", grokSecret);
+                "homelab-grok");
     }
 
     private static void assertPublicHomelabClient(RegisteredClient client) {
