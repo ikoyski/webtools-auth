@@ -78,7 +78,7 @@ class McpClientRegistrationControllerTest {
         Map<String, Object> request = Map.of(
                 "client_name", "Grok Kanban",
                 "redirect_uris", List.of("https://grok.com/connectors-oauth-exchange-code/"),
-                "grant_types", List.of("authorization_code"),
+                "grant_types", List.of("authorization_code", "refresh_token"),
                 "response_types", List.of("code"),
                 "token_endpoint_auth_method", "client_secret_post",
                 "scope", "kanban.read kanban.write");
@@ -102,6 +102,10 @@ class McpClientRegistrationControllerTest {
         assertTrue(registered.getClientSettings().isRequireProofKey());
         assertTrue(registered.getClientSettings().isRequireAuthorizationConsent());
         assertEquals(Set.of("kanban.read", "kanban.write"), registered.getScopes());
+        assertEquals(Set.of(AuthorizationGrantType.AUTHORIZATION_CODE, AuthorizationGrantType.REFRESH_TOKEN),
+                registered.getAuthorizationGrantTypes());
+        assertEquals(java.time.Duration.ofDays(30), registered.getTokenSettings().getRefreshTokenTimeToLive());
+        assertFalse(registered.getTokenSettings().isReuseRefreshTokens());
     }
 
     @Test
@@ -110,7 +114,7 @@ class McpClientRegistrationControllerTest {
         Map<String, Object> request = Map.of(
                 "client_name", "Homelab MCP",
                 "redirect_uris", List.of("https://claude.ai/api/mcp/auth_callback"),
-                "grant_types", List.of("authorization_code"),
+                "grant_types", List.of("authorization_code", "refresh_token"),
                 "response_types", List.of("code"),
                 "token_endpoint_auth_method", "none",
                 "scope", "homelab.read");
@@ -125,21 +129,30 @@ class McpClientRegistrationControllerTest {
         assertEquals(HOMELAB_RESOURCE,
                 registered.getClientSettings().getSetting(ClientSeeder.MCP_RESOURCE_SETTING));
         assertNull(registered.getClientSettings().getSetting(ClientSeeder.MCP_BACKEND_RESOURCE_SETTING));
+        assertEquals(Set.of(AuthorizationGrantType.AUTHORIZATION_CODE, AuthorizationGrantType.REFRESH_TOKEN),
+                registered.getAuthorizationGrantTypes());
+        assertEquals(java.time.Duration.ofDays(30), registered.getTokenSettings().getRefreshTokenTimeToLive());
+        assertFalse(registered.getTokenSettings().isReuseRefreshTokens());
     }
 
 
     @Test
-    void rejectsRefreshTokenGrantAndOfflineAccessScope() {
+    void rejectsRefreshOnlyAndUnsupportedGrantTypesAndOfflineAccessScope() {
         McpClientRegistrationController controller = controller(true);
-        Map<String, Object> refreshGrantRequest = Map.of(
+        Map<String, Object> refreshOnlyRequest = Map.of(
                 "redirect_uris", List.of("https://www.cursor.com/agents/mcp/oauth/callback"),
-                "grant_types", List.of("authorization_code", "refresh_token"),
+                "grant_types", List.of("refresh_token"),
+                "scope", "kanban.read");
+        Map<String, Object> unsupportedGrantRequest = Map.of(
+                "redirect_uris", List.of("https://www.cursor.com/agents/mcp/oauth/callback"),
+                "grant_types", List.of("authorization_code", "client_credentials"),
                 "scope", "kanban.read");
         Map<String, Object> offlineScopeRequest = Map.of(
                 "redirect_uris", List.of("https://www.cursor.com/agents/mcp/oauth/callback"),
                 "scope", "kanban.read offline_access");
 
-        assertEquals(HttpStatus.BAD_REQUEST, controller.register(refreshGrantRequest).getStatusCode());
+        assertEquals(HttpStatus.BAD_REQUEST, controller.register(refreshOnlyRequest).getStatusCode());
+        assertEquals(HttpStatus.BAD_REQUEST, controller.register(unsupportedGrantRequest).getStatusCode());
         assertEquals(HttpStatus.BAD_REQUEST, controller.register(offlineScopeRequest).getStatusCode());
         verify(clients, never()).save(any());
     }
