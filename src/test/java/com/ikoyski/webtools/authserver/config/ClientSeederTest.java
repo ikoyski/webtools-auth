@@ -111,7 +111,7 @@ class ClientSeederTest {
         seeder.run(new DefaultApplicationArguments());
 
         ArgumentCaptor<RegisteredClient> captor = ArgumentCaptor.forClass(RegisteredClient.class);
-        verify(clients, times(6)).save(captor.capture());
+        verify(clients, times(7)).save(captor.capture());
         Map<String, RegisteredClient> registered = captor.getAllValues().stream()
                 .collect(Collectors.toMap(RegisteredClient::getClientId, Function.identity()));
 
