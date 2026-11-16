@@ -252,6 +252,22 @@ class McpClientRegistrationControllerTest {
         assertEquals("invalid_type", McpClientRegistrationController.authenticationMethodCategory(42));
     }
 
+    @Test
+    void classifiesDcrGrantTypesWithoutLoggingArbitrarySubmittedValues() {
+        assertEquals(List.of("authorization_code", "refresh_token"),
+                McpClientRegistrationController.grantTypeCategories(
+                        List.of("authorization_code", "refresh_token")));
+        assertEquals(List.of("client_credentials", "other"),
+                McpClientRegistrationController.grantTypeCategories(
+                        List.of("client_credentials", "attacker-controlled-value")));
+        assertEquals(List.of("omitted"),
+                McpClientRegistrationController.grantTypeCategories(null));
+        assertEquals(List.of("invalid_type"),
+                McpClientRegistrationController.grantTypeCategories("authorization_code"));
+        assertEquals(List.of("invalid_item"),
+                McpClientRegistrationController.grantTypeCategories(List.of(42)));
+    }
+
     private McpClientRegistrationController controller(boolean enabled) {
         return new McpClientRegistrationController(
                 clients, passwordEncoder, enabled, MCP_RESOURCE, BACKEND_RESOURCE, HOMELAB_RESOURCE);
