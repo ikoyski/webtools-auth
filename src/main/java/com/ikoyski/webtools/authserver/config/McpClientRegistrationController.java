@@ -94,6 +94,10 @@ public class McpClientRegistrationController {
                 Object submittedMethod = request == null ? null : request.get("token_endpoint_auth_method");
                 log.warn("mcp_client_registration_rejected reason={} auth_method_category={}",
                         reason, authenticationMethodCategory(submittedMethod));
+            } else if ("unsupported_grant_types".equals(reason)) {
+                Object submittedGrantTypes = request == null ? null : request.get("grant_types");
+                log.warn("mcp_client_registration_rejected reason={} grant_type_categories={}",
+                        reason, grantTypeCategories(submittedGrantTypes));
             } else {
                 log.warn("mcp_client_registration_rejected reason={}", reason);
             }
@@ -114,6 +118,30 @@ public class McpClientRegistrationController {
             case "self_signed_tls_client_auth" -> "self_signed_tls_client_auth";
             default -> "other";
         };
+    }
+
+    static List<String> grantTypeCategories(Object value) {
+        if (value == null) return List.of("omitted");
+        if (!(value instanceof List<?> grantTypes)) return List.of("invalid_type");
+
+        Set<String> categories = new LinkedHashSet<>();
+        for (Object grantType : grantTypes) {
+            if (!(grantType instanceof String type) || type.isBlank()) {
+                categories.add("invalid_item");
+                continue;
+            }
+            categories.add(switch (type.trim()) {
+                case "authorization_code" -> "authorization_code";
+                case "refresh_token" -> "refresh_token";
+                case "client_credentials" -> "client_credentials";
+                case "password" -> "password";
+                case "implicit" -> "implicit";
+                case "urn:ietf:params:oauth:grant-type:device_code" -> "device_code";
+                case "urn:ietf:params:oauth:grant-type:token-exchange" -> "token_exchange";
+                default -> "other";
+            });
+        }
+        return List.copyOf(categories);
     }
 
     private static String rejectionReason(String message) {
