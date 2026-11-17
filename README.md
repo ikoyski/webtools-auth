@@ -54,7 +54,7 @@ Pre-registered clients are seeded/upserted by `ClientSeeder` at application star
 |---|---|---|
 | Claude | MCP access | Configurable public or confidential client; PKCE |
 | Homelab Claude | Homelab MCP | `homelab-claude`; public PKCE client |
-| Homelab Gemini | Homelab MCP | `homelab-gemini`; public PKCE client; validated dynamic callback |
+| Homelab Gemini | Homelab MCP | `homelab-gemini`; public PKCE client; Google user-bound callback |
 | Homelab Grok | Homelab MCP | Pre-registered public client (`homelab-grok`); PKCE; no client secret |
 | ChatGPT | MCP access | Optional; PKCE; public without a secret, confidential with a secret |
 | Gemini | MCP access | Optional; PKCE; public without a secret, confidential with a secret |
@@ -113,14 +113,14 @@ The three pre-registered Homelab clients are separate from the Kanban MCP client
 | Client ID | Client type | Callback behavior | Scope / audience |
 |---|---|---|---|
 | `homelab-claude` | Public PKCE | Exact Claude callback allow-list | `homelab.read`; Homelab MCP resource only |
-| `homelab-gemini` | Public PKCE | Google user-bound callback validated by the Auth Server | `homelab.read`; Homelab MCP resource only |
+| `homelab-gemini` | Public PKCE | Google user-bound callback; HTTPS host/path checks | `homelab.read`; Homelab MCP resource only |
 | `homelab-grok` | Public PKCE | Exact Grok callback in its named registration | `homelab.read`; Homelab MCP resource only |
 
 These named clients are seeded by `ClientSeeder` when the Homelab resource and required client registration values are present. They do not need DCR and do not receive the Kanban backend audience. The named `homelab-grok` client has no client secret. A DCR-created Grok client is a separate flow and may be confidential using a server-generated secret.
 
 ## Config Server properties
 
-The identity server expects its issuer, database, federated-provider credentials, signing-key paths and OAuth client registrations to be supplied through external configuration. MCP Dynamic Client Registration is controlled by `auth.mcp.client-registration.enabled` and defaults to disabled in application code. The homelab's private/base configuration explicitly enables it for controlled Grok integration testing; Render test uses its separate `webtools-auth-mcp.yaml` overlay. Keep it disabled in environments where Grok/Cursor onboarding is not being tested.
+The identity server expects its issuer, database, federated-provider credentials, signing-key paths and OAuth client registrations to be supplied through external configuration. MCP Dynamic Client Registration is controlled by `auth.mcp.client-registration.enabled` and defaults to disabled in application code. The current base Config Server file `config/webtools-auth.yaml` explicitly enables it. The current `config-public/webtools-auth-public.yaml` overlay does not override the flag, and there is no `webtools-auth-mcp.yaml` overlay in the current Config Server tree. The base setting is therefore inherited by the public profile unless a later profile-specific override is added. Verify effective property sources before deployment; keep DCR enabled only in environments deliberately used for integration testing.
 
 For GitHub sign-in, the Config Server provides the `spring.security.oauth2.client.registration.github` properties (`client-id`, `client-secret`, and scopes `read:user`, `user:email`). Keep the OAuth App secret in the private configuration/secret store, not in the frontend repository.
 
