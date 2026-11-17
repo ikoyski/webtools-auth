@@ -55,7 +55,7 @@ Pre-registered clients are seeded/upserted by `ClientSeeder` at application star
 | Claude | MCP access | Configurable public or confidential client; PKCE |
 | Homelab Claude | Homelab MCP | `homelab-claude`; public PKCE client |
 | Homelab Gemini | Homelab MCP | `homelab-gemini`; public PKCE client; validated dynamic callback |
-| Homelab Grok | Homelab MCP | `homelab-grok`; confidential `client_secret_post` client; PKCE |
+| Homelab Grok | Homelab MCP | Pre-registered public client (`homelab-grok`); PKCE; no client secret |
 | ChatGPT | MCP access | Optional; PKCE; public without a secret, confidential with a secret |
 | Gemini | MCP access | Optional; PKCE; public without a secret, confidential with a secret |
 | Grok | MCP access | Restricted DCR; generated confidential-client secret; PKCE; exact callback allow-list |
@@ -65,16 +65,16 @@ Pre-registered clients are seeded/upserted by `ClientSeeder` at application star
 
 Kanban MCP clients use `auth.resources.kanban-mcp.resource` and also receive the backing Kanban API resource URI in `aud`, because the Kanban MCP service forwards the delegated token to that API. Homelab MCP clients use only `auth.resources.homelab-mcp.resource`; they never receive the Kanban backend audience. The Kanban web client itself receives only its API audience. Additional first-party browser clients are configured under `auth.clients.applications`; each requires its own exact redirect URI list, scopes and API `resource-uri`.
 
-Optional ChatGPT is seeded only when its client ID and at least one redirect URI are configured. The named Homelab Claude and Gemini clients are seeded with defaults `homelab-claude` and `homelab-gemini`; Gemini's redirect-uris list is empty because Google supplies a user-bound callback at authorization time. The named Homelab Grok client defaults to `homelab-grok` and is seeded only when `auth.clients.homelab-grok.client-secret` (or `AUTH_HOMELAB_GROK_CLIENT_SECRET`) is configured. Grok's secret is password-encoded in the registered-client database. All MCP clients require PKCE and have one-hour access tokens with no refresh-token grant. The Kanban browser client retains its separately configured eight-hour access-token lifetime.
+Optional ChatGPT is seeded only when its client ID and at least one redirect URI are configured. The named Homelab Claude and Gemini clients are seeded with defaults `homelab-claude` and `homelab-gemini`; Gemini's redirect-uris list is empty because Google supplies a user-bound callback at authorization time. The named Homelab Grok client defaults to `homelab-grok` and is seeded from its client ID and exact redirect URI list; it is a public client using `ClientAuthenticationMethod.NONE`, PKCE and no client secret. All named Homelab MCP clients require PKCE and have one-hour access tokens with no refresh-token grant. The Kanban browser client retains its separately configured eight-hour access-token lifetime.
 
 ### Redirect URI rules
 
 - Register exact redirect URIs supplied by the OAuth client product. Never use wildcards.
 - For ChatGPT, use the exact callback URL shown in the connector setup UI. Depending on the integration flow, this may be a callback-specific URL rather than the stable `/connector_platform_oauth_redirect` URI. The server's authorization-response issuer-identification behavior must also match the callback requirements.
-- Gemini MCP uses a per-user callback under `https://oauth-redirect.googleusercontent.com/r/`. The auth server validates the Google redirect host and callback path; no per-user callback is stored in Config Server. The client seeder stores a reserved placeholder URI because Spring requires a redirect URI on authorization-code client registrations; the Gemini validator never accepts that placeholder.
-- Grok custom MCP connectors use DCR with the observed callback `https://grok.com/connectors-oauth-exchange-code/`.
+- Gemini MCP uses a per-user callback under `https://oauth-redirect.googleusercontent.com/r/`. The auth server validates HTTPS, the exact Google redirect host and the user-bound callback path shape; no per-user callback is stored in Config Server. Current code computes the expected resource-host slug but does not compare that slug with the callback path suffix, so do not claim that the suffix is cryptographically/resource-specifically bound until the validator and its tests are corrected. The client seeder stores a reserved placeholder URI because Spring requires a redirect URI on authorization-code client registrations; the Gemini validator never accepts that placeholder.
+- The Kanban Grok DCR flow uses the observed callback `https://grok.com/connectors-oauth-exchange-code/`. This is distinct from the pre-registered Homelab client `homelab-grok`, which is a public PKCE client and does not use DCR.
 - Cursor remote MCP uses DCR with the documented web callback `https://www.cursor.com/agents/mcp/oauth/callback` and desktop callback `http://localhost:8787/callback`.
-- DCR is exposed at `/oauth2/register` and advertised in authorization-server metadata only when `auth.mcp.client-registration.enabled=true`. It remains disabled by default in application code. The homelab integration-test configuration explicitly enables it; Render test enables it through the `webtools-auth-mcp.yaml` overlay and `public,mcp` profiles. Keep it disabled in deployments that are not actively testing Grok/Cursor.
+- DCR is exposed at `/oauth2/register` and advertised in authorization-server metadata only when `auth.mcp.client-registration.enabled=true`. It remains disabled by default in application code. The current base Config Server file `config/webtools-auth.yaml` explicitly sets it to `true`. The current `config-public/webtools-auth-public.yaml` overlay does not override that setting; there is no committed `webtools-auth-mcp.yaml` overlay. Therefore the base setting is inherited by the public profile unless a later profile-specific override is added. Review this carefully before deployment; DCR should be enabled only where the integration is intentionally being tested.
 - DCR accepts only Authorization Code clients with PKCE, approved callbacks, and one application-specific scope family per client. Refresh-token grants and the `offline_access` scope are not supported for MCP clients. Kanban clients may request `kanban.read`/`kanban.write` and receive the Kanban MCP plus backing API audiences. Homelab clients may request `homelab.read` and receive only the Homelab MCP audience; mixed Kanban/Homelab scopes are rejected. Claude and Gemini callbacks are accepted alongside the existing Grok and Cursor callbacks. Cursor and Claude use public clients (`none`). DCR Grok clients may use `client_secret_post` with the exact Grok callback; the server generates a high-entropy secret, stores only its password-encoded form and returns the secret once. Caller-supplied secrets, arbitrary redirects, unrelated scopes, refresh-token grants, `offline_access`, and arbitrary resource audiences are rejected. The named Homelab clients are pre-registered separately and do not depend on DCR.
 - Test the complete authorization-code flow with each product before enabling it for users.
 
@@ -99,12 +99,24 @@ auth:
     homelab-grok:
       client-id: homelab-grok
       resource: homelab-mcp
-      client-secret: ${AUTH_HOMELAB_GROK_CLIENT_SECRET:}
+      # Public PKCE client; no client secret.
       redirect-uris:
         - https://grok.com/connectors-oauth-exchange-code/
 ```
 
-Set `AUTH_HOMELAB_GROK_CLIENT_SECRET` as a secret in the Auth Server runtime environment. Do not commit the plaintext secret. Claude and Gemini are public PKCE clients and do not need a client secret. Gemini's registered redirect placeholder is validated using that specific client's Homelab resource audience.
+The named `homelab-grok` client is public and does not require `AUTH_HOMELAB_GROK_CLIENT_SECRET`. Do not add a secret to this named client. The separate DCR-created Grok client may use the generated `client_secret_post` secret returned once by the registration endpoint. Claude, Gemini and the named Homelab Grok client are public PKCE clients. Gemini's registered placeholder is an internal Spring Authorization Server requirement; it is not an accepted live callback.
+
+### Homelab named-client behavior
+
+The three pre-registered Homelab clients are separate from the Kanban MCP clients and from random client IDs created through DCR:
+
+| Client ID | Client type | Callback behavior | Scope / audience |
+|---|---|---|---|
+| `homelab-claude` | Public PKCE | Exact Claude callback allow-list | `homelab.read`; Homelab MCP resource only |
+| `homelab-gemini` | Public PKCE | Google user-bound callback validated by the Auth Server | `homelab.read`; Homelab MCP resource only |
+| `homelab-grok` | Public PKCE | Exact Grok callback in its named registration | `homelab.read`; Homelab MCP resource only |
+
+These named clients are seeded by `ClientSeeder` when the Homelab resource and required client registration values are present. They do not need DCR and do not receive the Kanban backend audience. The named `homelab-grok` client has no client secret. A DCR-created Grok client is a separate flow and may be confidential using a server-generated secret.
 
 ## Config Server properties
 
