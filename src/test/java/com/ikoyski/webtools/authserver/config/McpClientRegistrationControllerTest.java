@@ -243,6 +243,22 @@ class McpClientRegistrationControllerTest {
     }
 
     @Test
+    void defaultsClaudeCodeLoopbackRegistrationToHomelabScopeWhenScopeIsOmitted() {
+        McpClientRegistrationController controller = controller(true);
+        Map<String, Object> request = Map.of(
+                "client_name", "Claude Code",
+                "redirect_uris", List.of("http://localhost:49152/callback"));
+
+        ResponseEntity<Map<String, Object>> response = controller.register(request);
+
+        assertEquals(HttpStatus.CREATED, response.getStatusCode());
+        assertEquals("homelab.read", response.getBody().get("scope"));
+        ArgumentCaptor<RegisteredClient> captor = ArgumentCaptor.forClass(RegisteredClient.class);
+        verify(clients).save(captor.capture());
+        assertEquals(Set.of("homelab.read"), captor.getValue().getScopes());
+    }
+
+    @Test
     void rejectsUnsafeClaudeCodeLoopbackCallbackVariants() {
         McpClientRegistrationController controller = controller(true);
         List<String> invalidCallbacks = List.of(
