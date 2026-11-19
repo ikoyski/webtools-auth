@@ -204,8 +204,11 @@ public class McpClientRegistrationController {
                         redirectUris.get(0), GeminiRedirectUriValidator.resourceHostSlug(homelabMcpResource));
         boolean claudeCodeLoopbackRedirect = redirectUris.size() == 1
                 && isClaudeCodeLoopbackRedirectUri(redirectUris.get(0));
+        boolean containsClaudeCodeLoopbackRedirect = redirectUris.stream()
+                .anyMatch(McpClientRegistrationController::isClaudeCodeLoopbackRedirectUri);
         if (redirectUris.isEmpty() || redirectUris.size() > 2
                 || new LinkedHashSet<>(redirectUris).size() != redirectUris.size()
+                || (containsClaudeCodeLoopbackRedirect && !claudeCodeLoopbackRedirect)
                 || (!ALLOWED_REDIRECT_URIS.containsAll(redirectUris)
                         && !geminiDynamicRedirect && !claudeCodeLoopbackRedirect)) {
             throw new IllegalArgumentException("redirect_uris must contain only approved Claude, Grok, Cursor, Gemini or Claude Code callback URLs");
