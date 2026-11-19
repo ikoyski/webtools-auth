@@ -271,6 +271,21 @@ class McpClientRegistrationControllerTest {
     }
 
     @Test
+    void rejectsMixingClaudeCodeLoopbackCallbackWithOtherApprovedCallbacks() {
+        McpClientRegistrationController controller = controller(true);
+        Map<String, Object> request = Map.of(
+                "redirect_uris", List.of(
+                        "http://localhost:49152/callback",
+                        "https://claude.ai/api/mcp/auth_callback"),
+                "scope", "homelab.read");
+
+        ResponseEntity<Map<String, Object>> response = controller.register(request);
+
+        assertEquals(HttpStatus.BAD_REQUEST, response.getStatusCode());
+        verify(clients, never()).save(any());
+    }
+
+    @Test
     void restrictsClaudeCodeLoopbackClientsToPublicHomelabAuthorizationCodeFlow() {
         McpClientRegistrationController controller = controller(true);
         Map<String, Object> kanbanScope = Map.of(
