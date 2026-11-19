@@ -52,6 +52,34 @@ public class McpClientRegistrationController {
             "https://claude.com/api/mcp/auth_callback",
             "https://www.cursor.com/agents/mcp/oauth/callback",
             "http://localhost:8787/callback");
+
+    /**
+     * Claude Code is a native OAuth client. Its loopback callback port is selected at
+     * runtime, so only the host and fixed callback path are allow-listed here.
+     * This exception is intentionally limited to Homelab MCP DCR clients below.
+     */
+    static boolean isClaudeCodeLoopbackRedirectUri(String value) {
+        if (value == null || value.isBlank()) {
+            return false;
+        }
+        try {
+            java.net.URI uri = new java.net.URI(value);
+            String scheme = uri.getScheme();
+            String host = uri.getHost();
+            int port = uri.getPort();
+            return scheme != null
+                    && "http".equalsIgnoreCase(scheme)
+                    && host != null
+                    && ("localhost".equalsIgnoreCase(host) || "127.0.0.1".equals(host))
+                    && port >= 1 && port <= 65535
+                    && "/callback".equals(uri.getRawPath())
+                    && uri.getRawUserInfo() == null
+                    && uri.getRawQuery() == null
+                    && uri.getRawFragment() == null;
+        } catch (java.net.URISyntaxException ex) {
+            return false;
+        }
+    }
     private static final Set<String> ALLOWED_GRANT_TYPES = Set.of("authorization_code", "refresh_token");
     private static final Duration MCP_REFRESH_TOKEN_TTL = Duration.ofDays(30);
     private static final Set<String> KANBAN_SCOPES = Set.of("kanban.read", "kanban.write");
@@ -174,10 +202,13 @@ public class McpClientRegistrationController {
         boolean geminiDynamicRedirect = redirectUris.size() == 1
                 && GeminiRedirectUriValidator.isValidRedirectUri(
                         redirectUris.get(0), GeminiRedirectUriValidator.resourceHostSlug(homelabMcpResource));
+        boolean claudeCodeLoopbackRedirect = redirectUris.size() == 1
+                && isClaudeCodeLoopbackRedirectUri(redirectUris.get(0));
         if (redirectUris.isEmpty() || redirectUris.size() > 2
                 || new LinkedHashSet<>(redirectUris).size() != redirectUris.size()
-                || (!ALLOWED_REDIRECT_URIS.containsAll(redirectUris) && !geminiDynamicRedirect)) {
-            throw new IllegalArgumentException("redirect_uris must contain only approved Claude, Grok, Cursor or Gemini callback URLs");
+                || (!ALLOWED_REDIRECT_URIS.containsAll(redirectUris)
+                        && !geminiDynamicRedirect && !claudeCodeLoopbackRedirect)) {
+            throw new IllegalArgumentException("redirect_uris must contain only approved Claude, Grok, Cursor, Gemini or Claude Code callback URLs");
         }
 
         List<String> grantTypes = stringList(request.get("grant_types"), "grant_types",
@@ -186,6 +217,10 @@ public class McpClientRegistrationController {
         if (!grantTypeSet.contains(AuthorizationGrantType.AUTHORIZATION_CODE.getValue())
                 || !ALLOWED_GRANT_TYPES.containsAll(grantTypeSet)) {
             throw new IllegalArgumentException("Only authorization_code, optionally combined with refresh_token, is supported");
+        }
+        if (claudeCodeLoopbackRedirect
+                && !grantTypeSet.equals(Set.of(AuthorizationGrantType.AUTHORIZATION_CODE.getValue()))) {
+            throw new IllegalArgumentException("Claude Code loopback clients may use only the authorization_code grant");
         }
 
         List<String> responseTypes = stringList(request.get("response_types"), "response_types", List.of("code"));
@@ -200,6 +235,9 @@ public class McpClientRegistrationController {
         }
         if (confidentialGrokClient && !redirectUris.equals(List.of(GROK_REDIRECT_URI))) {
             throw new IllegalArgumentException("client_secret_post is reserved for the exact Grok callback");
+        }
+        if (claudeCodeLoopbackRedirect && !"none".equals(authenticationMethod)) {
+            throw new IllegalArgumentException("Claude Code loopback clients must be public clients using token_endpoint_auth_method 'none'");
         }
 
         String clientName = optionalString(request.get("client_name"), "MCP client").trim();
@@ -220,6 +258,9 @@ public class McpClientRegistrationController {
         boolean homelabClient = scopes.contains("homelab.read");
         if (homelabClient && scopes.stream().anyMatch(scope -> !HOMELAB_SCOPES.contains(scope))) {
             throw new IllegalArgumentException("Homelab and Kanban scopes cannot be combined in one client");
+        }
+        if (claudeCodeLoopbackRedirect && (!homelabClient || scopes.size() != 1)) {
+            throw new IllegalArgumentException("Claude Code loopback clients are restricted to the homelab.read scope");
         }
         if (!homelabClient && !scopes.contains("kanban.read")) {
             throw new IllegalArgumentException("The kanban.read scope is required");
