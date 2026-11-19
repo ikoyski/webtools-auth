@@ -221,10 +221,9 @@ public class McpClientRegistrationController {
                 || !ALLOWED_GRANT_TYPES.containsAll(grantTypeSet)) {
             throw new IllegalArgumentException("Only authorization_code, optionally combined with refresh_token, is supported");
         }
-        if (claudeCodeLoopbackRedirect
-                && !grantTypeSet.equals(Set.of(AuthorizationGrantType.AUTHORIZATION_CODE.getValue()))) {
-            throw new IllegalArgumentException("Claude Code loopback clients may use only the authorization_code grant");
-        }
+        // Claude Code requests refresh_token as part of its native OAuth client registration.
+        // The global allowlist above keeps this to authorization_code and refresh_token only.
+        // Its public-client, PKCE, Homelab-only scope and audience restrictions remain enforced.
 
         List<String> responseTypes = stringList(request.get("response_types"), "response_types", List.of("code"));
         if (!Set.of("code").equals(new LinkedHashSet<>(responseTypes))) {
