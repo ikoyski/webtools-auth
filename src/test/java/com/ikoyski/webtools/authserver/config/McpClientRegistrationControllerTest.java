@@ -10,6 +10,7 @@ import static org.mockito.Mockito.never;
 import static org.mockito.Mockito.times;
 import static org.mockito.Mockito.verify;
 
+import java.time.Duration;
 import java.util.List;
 import java.util.Map;
 import java.util.Set;
@@ -302,24 +303,47 @@ class McpClientRegistrationControllerTest {
     }
 
     @Test
-    void restrictsClaudeCodeLoopbackClientsToPublicHomelabAuthorizationCodeFlow() {
+    void allowsClaudeCodeRefreshTokensButKeepsPublicHomelabOnlyRestrictions() {
         McpClientRegistrationController controller = controller(true);
-        Map<String, Object> kanbanScope = Map.of(
-                "redirect_uris", List.of("http://localhost:49152/callback"),
-                "scope", "kanban.read");
         Map<String, Object> refreshGrant = Map.of(
                 "redirect_uris", List.of("http://localhost:49152/callback"),
                 "grant_types", List.of("authorization_code", "refresh_token"),
                 "scope", "homelab.read");
+
+        ResponseEntity<Map<String, Object>> accepted = controller.register(refreshGrant);
+
+        assertEquals(HttpStatus.CREATED, accepted.getStatusCode());
+        ArgumentCaptor<RegisteredClient> captor = ArgumentCaptor.forClass(RegisteredClient.class);
+        verify(clients).save(captor.capture());
+        RegisteredClient registered = captor.getValue();
+        assertEquals(Set.of(AuthorizationGrantType.AUTHORIZATION_CODE, AuthorizationGrantType.REFRESH_TOKEN),
+                registered.getAuthorizationGrantTypes());
+        assertEquals(Set.of("homelab.read"), registered.getScopes());
+        assertEquals(ClientAuthenticationMethod.NONE,
+                registered.getClientAuthenticationMethods().iterator().next());
+        assertTrue(registered.getClientSettings().isRequireProofKey());
+        assertEquals(Duration.ofDays(30), registered.getTokenSettings().getRefreshTokenTimeToLive());
+        assertFalse(registered.getTokenSettings().isReuseRefreshTokens());
+        assertEquals(HOMELAB_RESOURCE,
+                registered.getClientSettings().getSetting(ClientSeeder.MCP_RESOURCE_SETTING));
+        assertNull(registered.getClientSettings().getSetting(ClientSeeder.MCP_BACKEND_RESOURCE_SETTING));
+
+        Map<String, Object> kanbanScope = Map.of(
+                "redirect_uris", List.of("http://localhost:49152/callback"),
+                "scope", "kanban.read");
         Map<String, Object> confidentialClient = Map.of(
                 "redirect_uris", List.of("http://localhost:49152/callback"),
                 "token_endpoint_auth_method", "client_secret_post",
                 "scope", "homelab.read");
+        Map<String, Object> unsupportedGrant = Map.of(
+                "redirect_uris", List.of("http://localhost:49152/callback"),
+                "grant_types", List.of("authorization_code", "client_credentials"),
+                "scope", "homelab.read");
 
         assertEquals(HttpStatus.BAD_REQUEST, controller.register(kanbanScope).getStatusCode());
-        assertEquals(HttpStatus.BAD_REQUEST, controller.register(refreshGrant).getStatusCode());
         assertEquals(HttpStatus.BAD_REQUEST, controller.register(confidentialClient).getStatusCode());
-        verify(clients, never()).save(any());
+        assertEquals(HttpStatus.BAD_REQUEST, controller.register(unsupportedGrant).getStatusCode());
+        verify(clients, times(1)).save(any());
     }
 
     @Test
