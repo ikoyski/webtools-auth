@@ -38,8 +38,9 @@ Grok and Cursor use the restricted DCR endpoint at `/oauth2/register`, advertise
 - Grok: `https://grok.com/connectors-oauth-exchange-code/`
 - Cursor web: `https://www.cursor.com/agents/mcp/oauth/callback`
 - Cursor desktop: `http://localhost:8787/callback`
+- Claude Code CLI: `http://localhost:<port>/callback` or `http://127.0.0.1:<port>/callback`, with a runtime-selected port from 1 through 65535. The DCR validator accepts only HTTP, those exact loopback hosts, the exact `/callback` path, and no user-info, query or fragment. It must be the client's only redirect URI. Claude Code loopback DCR clients are public (`none`), Authorization Code only (no refresh-token grant), and restricted to `homelab.read`; they receive only the Homelab MCP audience and never the Kanban backend audience.
 
-Cursor remains a public client using `none`. A DCR-created Grok client may use `client_secret_post` with its exact callback; generate its high-entropy secret server-side, store only the password-encoded value and return the secret once. This DCR-created client is distinct from the pre-registered public `homelab-grok` client. Reject caller-supplied secrets, unapproved redirect URIs and unsupported grants. DCR accepts one scope family only: Kanban (`kanban.read` and/or `kanban.write`, with `kanban.read` required) or Homelab (`homelab.read`); mixed families and `offline_access` are rejected. Refresh-token grants are not supported; MCP access tokens expire after one hour and clients must reauthorize. Kanban DCR clients receive both the configured Kanban MCP and backing API audiences; Homelab DCR clients receive only the configured Homelab MCP audience. Do not enable DCR in production without explicit approval and a completed end-to-end review.
+Cursor remains a public client using `none`. A DCR-created Grok client may use `client_secret_post` with its exact callback; generate its high-entropy secret server-side, store only the password-encoded value and return the secret once. This DCR-created client is distinct from the pre-registered public `homelab-grok` client. Reject caller-supplied secrets, unapproved redirect URIs and unsupported grants. DCR accepts one scope family only: Kanban (`kanban.read` and/or `kanban.write`, with `kanban.read` required) or Homelab (`homelab.read`); mixed families and `offline_access` are rejected. Claude Code loopback registrations are limited to the Authorization Code grant and cannot receive refresh tokens. Other DCR-created MCP clients retain the controller's existing optional `refresh_token` grant behavior. Access tokens expire after one hour. Kanban DCR clients receive both the configured Kanban MCP and backing API audiences; Homelab DCR clients receive only the configured Homelab MCP audience. Do not enable DCR in production without explicit approval and a completed end-to-end review.
 
 ## Federated identity providers
 
@@ -88,7 +89,7 @@ Current Config Server state: `config/webtools-auth.yaml` explicitly sets `auth.m
 ## Important implementation areas
 
 - `ClientSeeder` — config-driven pre-registered client creation/update, public/confidential client behavior, MCP resource binding and the Gemini dynamic-redirect client marker.
-- `McpClientRegistrationController` — restricted RFC 7591 registration for Grok/Cursor; disabled by default and enabled only through an explicit environment-specific Config Server setting.
+- `McpClientRegistrationController` — restricted RFC 7591 registration for Grok, Cursor and Claude Code; disabled by default and enabled only through an explicit environment-specific Config Server setting. Claude Code's dynamic loopback-port exception must remain restricted to the Homelab public-client profile described above.
 - `GeminiRedirectUriValidator` — strict validation of Gemini's user-bound callback against the configured MCP resource host.
 - `AuthorizationServerConfig` — authorization server components, OIDC ID-token claims and JWT access-token customization.
 - `FederatedLoginSuccessHandler` — federated login completion and central identity resolution.
@@ -121,7 +122,7 @@ Never commit secrets, client credentials, backend internal keys, database passwo
 ## Security invariants
 
 - Require PKCE for authorization-code clients.
-- Keep redirect URIs exact for all clients except the narrowly validated Gemini user-bound callback.
+- Keep redirect URIs exact for all clients except the narrowly validated Gemini user-bound callback and Claude Code loopback callback (exact HTTP loopback host + port + `/callback` path; no other URI components).
 - Do not weaken client authentication for confidential clients.
 - Never grant one application's audience to another client.
 - Require per-application scopes and exact audience checks at resource servers.

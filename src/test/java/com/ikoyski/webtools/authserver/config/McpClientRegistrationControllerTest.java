@@ -7,6 +7,7 @@ import static org.junit.jupiter.api.Assertions.assertNull;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.Mockito.never;
+import static org.mockito.Mockito.times;
 import static org.mockito.Mockito.verify;
 
 import java.util.List;
@@ -200,6 +201,124 @@ class McpClientRegistrationControllerTest {
         ResponseEntity<Map<String, Object>> response = controller.register(request);
 
         assertEquals(HttpStatus.BAD_REQUEST, response.getStatusCode());
+        verify(clients, never()).save(any());
+    }
+
+    @Test
+    void registersClaudeCodeLoopbackCallbacksAsPublicHomelabPkceClients() {
+        McpClientRegistrationController controller = controller(true);
+        List<String> callbacks = List.of(
+                "http://localhost:49152/callback",
+                "http://127.0.0.1:61234/callback");
+
+        for (String callback : callbacks) {
+            Map<String, Object> request = Map.of(
+                    "client_name", "Claude Code",
+                    "redirect_uris", List.of(callback),
+                    "grant_types", List.of("authorization_code"),
+                    "response_types", List.of("code"),
+                    "token_endpoint_auth_method", "none",
+                    "scope", "homelab.read");
+
+            ResponseEntity<Map<String, Object>> response = controller.register(request);
+            assertEquals(HttpStatus.CREATED, response.getStatusCode());
+            assertNotNull(response.getBody().get("client_id"));
+            assertNull(response.getBody().get("client_secret"));
+        }
+
+        ArgumentCaptor<RegisteredClient> captor = ArgumentCaptor.forClass(RegisteredClient.class);
+        verify(clients, times(2)).save(captor.capture());
+        for (RegisteredClient registered : captor.getAllValues()) {
+            assertEquals(ClientAuthenticationMethod.NONE,
+                    registered.getClientAuthenticationMethods().iterator().next());
+            assertTrue(registered.getClientSettings().isRequireProofKey());
+            assertTrue(registered.getClientSettings().isRequireAuthorizationConsent());
+            assertEquals(Set.of("homelab.read"), registered.getScopes());
+            assertEquals(Set.of(AuthorizationGrantType.AUTHORIZATION_CODE),
+                    registered.getAuthorizationGrantTypes());
+            assertEquals(HOMELAB_RESOURCE,
+                    registered.getClientSettings().getSetting(ClientSeeder.MCP_RESOURCE_SETTING));
+            assertNull(registered.getClientSettings().getSetting(ClientSeeder.MCP_BACKEND_RESOURCE_SETTING));
+        }
+    }
+
+    @Test
+    void defaultsClaudeCodeLoopbackRegistrationToHomelabScopeWhenScopeIsOmitted() {
+        McpClientRegistrationController controller = controller(true);
+        Map<String, Object> request = Map.of(
+                "client_name", "Claude Code",
+                "redirect_uris", List.of("http://localhost:49152/callback"));
+
+        ResponseEntity<Map<String, Object>> response = controller.register(request);
+
+        assertEquals(HttpStatus.CREATED, response.getStatusCode());
+        assertEquals("homelab.read", response.getBody().get("scope"));
+        ArgumentCaptor<RegisteredClient> captor = ArgumentCaptor.forClass(RegisteredClient.class);
+        verify(clients).save(captor.capture());
+        assertEquals(Set.of("homelab.read"), captor.getValue().getScopes());
+    }
+
+    @Test
+    void rejectsUnsafeClaudeCodeLoopbackCallbackVariants() {
+        McpClientRegistrationController controller = controller(true);
+        List<String> invalidCallbacks = List.of(
+                "https://localhost:49152/callback",
+                "http://localhost/callback",
+                "http://localhost:0/callback",
+                "http://localhost:65536/callback",
+                "http://localhost:49152/other",
+                "http://localhost:49152/callback/",
+                "http://localhost:49152/callback?next=https://attacker.example",
+                "http://localhost:49152/callback#fragment",
+                "http://user@localhost:49152/callback",
+                "http://attacker.example:49152/callback",
+                "http://localhost.evil.example:49152/callback",
+                "http://127.0.0.2:49152/callback",
+                "http://[::1]:49152/callback");
+
+        for (String callback : invalidCallbacks) {
+            Map<String, Object> request = Map.of(
+                    "redirect_uris", List.of(callback),
+                    "scope", "homelab.read");
+            ResponseEntity<Map<String, Object>> response = controller.register(request);
+            assertEquals(HttpStatus.BAD_REQUEST, response.getStatusCode(), callback);
+        }
+        verify(clients, never()).save(any());
+    }
+
+    @Test
+    void rejectsMixingClaudeCodeLoopbackCallbackWithOtherApprovedCallbacks() {
+        McpClientRegistrationController controller = controller(true);
+        Map<String, Object> request = Map.of(
+                "redirect_uris", List.of(
+                        "http://localhost:49152/callback",
+                        "https://claude.ai/api/mcp/auth_callback"),
+                "scope", "homelab.read");
+
+        ResponseEntity<Map<String, Object>> response = controller.register(request);
+
+        assertEquals(HttpStatus.BAD_REQUEST, response.getStatusCode());
+        verify(clients, never()).save(any());
+    }
+
+    @Test
+    void restrictsClaudeCodeLoopbackClientsToPublicHomelabAuthorizationCodeFlow() {
+        McpClientRegistrationController controller = controller(true);
+        Map<String, Object> kanbanScope = Map.of(
+                "redirect_uris", List.of("http://localhost:49152/callback"),
+                "scope", "kanban.read");
+        Map<String, Object> refreshGrant = Map.of(
+                "redirect_uris", List.of("http://localhost:49152/callback"),
+                "grant_types", List.of("authorization_code", "refresh_token"),
+                "scope", "homelab.read");
+        Map<String, Object> confidentialClient = Map.of(
+                "redirect_uris", List.of("http://localhost:49152/callback"),
+                "token_endpoint_auth_method", "client_secret_post",
+                "scope", "homelab.read");
+
+        assertEquals(HttpStatus.BAD_REQUEST, controller.register(kanbanScope).getStatusCode());
+        assertEquals(HttpStatus.BAD_REQUEST, controller.register(refreshGrant).getStatusCode());
+        assertEquals(HttpStatus.BAD_REQUEST, controller.register(confidentialClient).getStatusCode());
         verify(clients, never()).save(any());
     }
 
