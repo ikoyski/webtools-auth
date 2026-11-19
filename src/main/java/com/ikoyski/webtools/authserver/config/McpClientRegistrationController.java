@@ -248,7 +248,8 @@ public class McpClientRegistrationController {
             throw new IllegalArgumentException("client_name may contain only letters, numbers, spaces and basic punctuation (maximum 100 characters)");
         }
 
-        String scopeValue = optionalString(request.get("scope"), "kanban.read kanban.write").trim();
+        String scopeValue = optionalString(request.get("scope"),
+                claudeCodeLoopbackRedirect ? "homelab.read" : "kanban.read kanban.write").trim();
         Set<String> scopes = new LinkedHashSet<>();
         for (String scope : scopeValue.split("\\s+")) {
             if (!scope.isBlank()) {
