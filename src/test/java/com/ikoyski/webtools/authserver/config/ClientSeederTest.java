@@ -36,6 +36,7 @@ class ClientSeederTest {
     private static final String HOMELAB_RESOURCE = "https://homelab-mcp.ikoyski.top/mcp";
     private static final String CLAUDE_CALLBACK = "https://claude.ai/api/mcp/auth_callback";
     private static final String GROK_CALLBACK = "https://grok.com/connectors-oauth-exchange-code/";
+    private static final String ANTIGRAVITY_CALLBACK = "https://antigravity.google/oauth-callback";
     private static final String GEMINI_PLACEHOLDER =
             "https://oauth-redirect.googleusercontent.com/r/__dynamic_callback_placeholder__";
 
@@ -52,11 +53,12 @@ class ClientSeederTest {
         seeder.run(new DefaultApplicationArguments());
 
         ArgumentCaptor<RegisteredClient> captor = ArgumentCaptor.forClass(RegisteredClient.class);
-        verify(clients, times(3)).save(captor.capture());
+        verify(clients, times(4)).save(captor.capture());
         Map<String, RegisteredClient> registered = captor.getAllValues().stream()
                 .collect(Collectors.toMap(RegisteredClient::getClientId, Function.identity()));
 
-        assertEquals(Set.of("homelab-claude", "homelab-gemini", "homelab-grok"), registered.keySet());
+        assertEquals(Set.of("homelab-claude", "homelab-gemini", "homelab-grok", "homelab-antigravity"),
+                registered.keySet());
         assertPublicHomelabClient(registered.get("homelab-claude"));
         assertEquals(Set.of(CLAUDE_CALLBACK, "https://claude.com/api/mcp/auth_callback"),
                 registered.get("homelab-claude").getRedirectUris());
@@ -78,6 +80,10 @@ class ClientSeederTest {
         assertFalse(grok.getTokenSettings().isReuseRefreshTokens());
         assertHomelabResourceOnly(grok);
         assertEquals(Duration.ofHours(1), grok.getTokenSettings().getAccessTokenTimeToLive());
+
+        RegisteredClient antigravity = registered.get("homelab-antigravity");
+        assertPublicHomelabClient(antigravity);
+        assertEquals(Set.of(ANTIGRAVITY_CALLBACK), antigravity.getRedirectUris());
     }
 
     @Test
@@ -90,7 +96,8 @@ class ClientSeederTest {
                 .withProperty("auth.clients.kanban-chatgpt.redirect-uris[0]",
                         "https://chatgpt.com/connector_platform_oauth_redirect")
                 .withProperty("auth.clients.homelab-claude.redirect-uris[0]", CLAUDE_CALLBACK)
-                .withProperty("auth.clients.homelab-grok.redirect-uris[0]", GROK_CALLBACK);
+                .withProperty("auth.clients.homelab-grok.redirect-uris[0]", GROK_CALLBACK)
+                .withProperty("auth.clients.homelab-antigravity.redirect-uris[0]", ANTIGRAVITY_CALLBACK);
         ClientSeeder seeder = new ClientSeeder(
                 clients,
                 passwordEncoder,
@@ -106,12 +113,13 @@ class ClientSeederTest {
                 HOMELAB_RESOURCE,
                 "homelab-claude",
                 "homelab-gemini",
-                "homelab-grok");
+                "homelab-grok",
+                "homelab-antigravity");
 
         seeder.run(new DefaultApplicationArguments());
 
         ArgumentCaptor<RegisteredClient> captor = ArgumentCaptor.forClass(RegisteredClient.class);
-        verify(clients, times(7)).save(captor.capture());
+        verify(clients, times(8)).save(captor.capture());
         Map<String, RegisteredClient> registered = captor.getAllValues().stream()
                 .collect(Collectors.toMap(RegisteredClient::getClientId, Function.identity()));
 
@@ -140,7 +148,8 @@ class ClientSeederTest {
                 .withProperty("auth.clients.homelab-claude.redirect-uris[0]", CLAUDE_CALLBACK)
                 .withProperty("auth.clients.homelab-claude.redirect-uris[1]",
                         "https://claude.com/api/mcp/auth_callback")
-                .withProperty("auth.clients.homelab-grok.redirect-uris[0]", GROK_CALLBACK);
+                .withProperty("auth.clients.homelab-grok.redirect-uris[0]", GROK_CALLBACK)
+                .withProperty("auth.clients.homelab-antigravity.redirect-uris[0]", ANTIGRAVITY_CALLBACK);
         return new ClientSeeder(
                 clients,
                 passwordEncoder,
@@ -155,7 +164,8 @@ class ClientSeederTest {
                 HOMELAB_RESOURCE,
                 "homelab-claude",
                 "homelab-gemini",
-                "homelab-grok");
+                "homelab-grok",
+                "homelab-antigravity");
     }
 
     private static void assertPublicHomelabClient(RegisteredClient client) {
