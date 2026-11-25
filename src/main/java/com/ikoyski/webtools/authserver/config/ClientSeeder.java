@@ -58,6 +58,8 @@ public class ClientSeeder implements ApplicationRunner {
     private final List<String> homelabGeminiRedirectUris;
     private final String homelabGrokClientId;
     private final List<String> homelabGrokRedirectUris;
+    private final String homelabAntigravityClientId;
+    private final List<String> homelabAntigravityRedirectUris;
 
     public ClientSeeder(RegisteredClientRepository clients,
                         PasswordEncoder passwordEncoder,
@@ -77,7 +79,8 @@ public class ClientSeeder implements ApplicationRunner {
                         @Value("${auth.resources.homelab-mcp.resource:}") String homelabMcpResource,
                         @Value("${auth.clients.homelab-claude.client-id:homelab-claude}") String homelabClaudeClientId,
                         @Value("${auth.clients.homelab-gemini.client-id:homelab-gemini}") String homelabGeminiClientId,
-                        @Value("${auth.clients.homelab-grok.client-id:homelab-grok}") String homelabGrokClientId) {
+                        @Value("${auth.clients.homelab-grok.client-id:homelab-grok}") String homelabGrokClientId,
+                        @Value("${auth.clients.homelab-antigravity.client-id:homelab-antigravity}") String homelabAntigravityClientId) {
         this.clients = clients;
         this.passwordEncoder = passwordEncoder;
         this.claudeClientId = claudeClientId;
@@ -104,6 +107,8 @@ public class ClientSeeder implements ApplicationRunner {
         this.homelabGeminiRedirectUris = bindList(environment, "auth.clients.homelab-gemini.redirect-uris");
         this.homelabGrokClientId = homelabGrokClientId;
         this.homelabGrokRedirectUris = bindList(environment, "auth.clients.homelab-grok.redirect-uris");
+        this.homelabAntigravityClientId = homelabAntigravityClientId;
+        this.homelabAntigravityRedirectUris = bindList(environment, "auth.clients.homelab-antigravity.redirect-uris");
     }
 
     @Override
@@ -121,7 +126,7 @@ public class ClientSeeder implements ApplicationRunner {
 
     /**
      * Registers stable, provider-specific OAuth client IDs for the Homelab MCP resource.
-     * These clients are pre-registered so Claude, Gemini and Grok can use "Use your own
+     * These clients are pre-registered so Claude, Gemini, Grok and Antigravity can use "Use your own
      * OAuth client" / manual registration instead of receiving random DCR client IDs.
      */
     private void seedHomelabMcpClients() {
@@ -141,6 +146,9 @@ public class ClientSeeder implements ApplicationRunner {
         seedHomelabMcpClient(
                 homelabGrokClientId, "Homelab MCP - Grok",
                 homelabGrokRedirectUris, false, false, null);
+        seedHomelabMcpClient(
+                homelabAntigravityClientId, "Homelab MCP - Antigravity",
+                homelabAntigravityRedirectUris, false, false, null);
     }
 
     private void seedHomelabMcpClient(
