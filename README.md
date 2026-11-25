@@ -48,7 +48,7 @@ Keep the issuer stable and consistent with gateway and MCP JWT validation config
 
 ## Registered OAuth clients
 
-Pre-registered clients are seeded/upserted by `ClientSeeder` at application startup from Config Server properties. Homelab MCP has stable provider-specific client IDs: `homelab-claude`, `homelab-gemini`, and `homelab-grok`. Kanban's Grok and Cursor integrations can still use the restricted DCR endpoint described below. Do not edit `oauth2_registered_client` manually.
+Pre-registered clients are seeded/upserted by `ClientSeeder` at application startup from Config Server properties. Homelab MCP has stable provider-specific client IDs: `homelab-claude`, `homelab-gemini`, `homelab-grok`, and `homelab-antigravity`. Kanban's Grok and Cursor integrations can still use the restricted DCR endpoint described below. Do not edit `oauth2_registered_client` manually.
 
 | Client | Purpose | Typical security model |
 |---|---|---|
@@ -56,6 +56,7 @@ Pre-registered clients are seeded/upserted by `ClientSeeder` at application star
 | Homelab Claude | Homelab MCP | `homelab-claude`; public PKCE client |
 | Homelab Gemini | Homelab MCP | `homelab-gemini`; public PKCE client; Google user-bound callback |
 | Homelab Grok | Homelab MCP | Pre-registered public client (`homelab-grok`); PKCE; no client secret |
+| Homelab Antigravity | Homelab MCP | Pre-registered public client (`homelab-antigravity`); PKCE; exact Antigravity callback; no client secret |
 | ChatGPT | MCP access | Optional; PKCE; public without a secret, confidential with a secret |
 | Gemini | MCP access | Optional; PKCE; public without a secret, confidential with a secret |
 | Grok | MCP access | Restricted DCR; generated confidential-client secret; PKCE; exact callback allow-list |
@@ -65,7 +66,7 @@ Pre-registered clients are seeded/upserted by `ClientSeeder` at application star
 
 Kanban MCP clients use `auth.resources.kanban-mcp.resource` and also receive the backing Kanban API resource URI in `aud`, because the Kanban MCP service forwards the delegated token to that API. Homelab MCP clients use only `auth.resources.homelab-mcp.resource`; they never receive the Kanban backend audience. The Kanban web client itself receives only its API audience. Additional first-party browser clients are configured under `auth.clients.applications`; each requires its own exact redirect URI list, scopes and API `resource-uri`.
 
-Optional ChatGPT is seeded only when its client ID and at least one redirect URI are configured. The named Homelab Claude and Gemini clients are seeded with defaults `homelab-claude` and `homelab-gemini`; Gemini's redirect-uris list is empty because Google supplies a user-bound callback at authorization time. The named Homelab Grok client defaults to `homelab-grok` and is seeded from its client ID and exact redirect URI list; it is a public client using `ClientAuthenticationMethod.NONE`, PKCE and no client secret. All named Homelab MCP clients require PKCE and have one-hour access tokens with no refresh-token grant. The Kanban browser client retains its separately configured eight-hour access-token lifetime.
+Optional ChatGPT is seeded only when its client ID and at least one redirect URI are configured. The named Homelab Claude and Gemini clients are seeded with defaults `homelab-claude` and `homelab-gemini`; Gemini's redirect-uris list is empty because Google supplies a user-bound callback at authorization time. The named Homelab Grok client defaults to `homelab-grok` and is seeded from its client ID and exact redirect URI list; it is a public client using `ClientAuthenticationMethod.NONE`, PKCE and no client secret. The named Homelab Antigravity client defaults to `homelab-antigravity` and is seeded from its client ID and exact redirect URI list; it is also a public PKCE client with no client secret. All named Homelab MCP clients require PKCE and have one-hour access tokens with no refresh-token grant. The Kanban browser client retains its separately configured eight-hour access-token lifetime.
 
 ### Redirect URI rules
 
@@ -103,6 +104,12 @@ auth:
       # Public PKCE client; no client secret.
       redirect-uris:
         - https://grok.com/connectors-oauth-exchange-code/
+    homelab-antigravity:
+      client-id: homelab-antigravity
+      resource: homelab-mcp
+      # Public PKCE client; no client secret.
+      redirect-uris:
+        - https://antigravity.google/oauth-callback
 ```
 
 The named `homelab-grok` client is public and does not require `AUTH_HOMELAB_GROK_CLIENT_SECRET`. Do not add a secret to this named client. The separate DCR-created Grok client may use the generated `client_secret_post` secret returned once by the registration endpoint. Claude, Gemini and the named Homelab Grok client are public PKCE clients. Gemini's registered placeholder is an internal Spring Authorization Server requirement; it is not an accepted live callback.
@@ -116,6 +123,7 @@ The three pre-registered Homelab clients are separate from the Kanban MCP client
 | `homelab-claude` | Public PKCE | Exact Claude callback allow-list | `homelab.read`; Homelab MCP resource only |
 | `homelab-gemini` | Public PKCE | Google user-bound callback; HTTPS host/path checks | `homelab.read`; Homelab MCP resource only |
 | `homelab-grok` | Public PKCE | Exact Grok callback in its named registration | `homelab.read`; Homelab MCP resource only |
+| `homelab-antigravity` | Public PKCE | Exact Antigravity callback `https://antigravity.google/oauth-callback` | `homelab.read`; Homelab MCP resource only |
 
 These named clients are seeded by `ClientSeeder` when the Homelab resource and required client registration values are present. They do not need DCR and do not receive the Kanban backend audience. The named `homelab-grok` client has no client secret. A DCR-created Grok client is a separate flow and may be confidential using a server-generated secret.
 
