@@ -66,6 +66,27 @@ public class AuthorizationServerConfig {
     }
 
     /**
+     * Composes the token generators used by the authorization-server token endpoint.
+     * The custom refresh-token generator preserves Spring's default behavior for confidential
+     * clients while enabling opted-in public PKCE clients.
+     */
+    @Bean
+    public OAuth2TokenGenerator<?> tokenGenerator(
+            JWKSource<SecurityContext> jwkSource,
+            OAuth2TokenCustomizer<JwtEncodingContext> jwtCustomizer) {
+        JwtGenerator jwtGenerator = new JwtGenerator(new NimbusJwtEncoder(jwkSource));
+        jwtGenerator.setJwtCustomizer(jwtCustomizer);
+
+        OAuth2AccessTokenGenerator accessTokenGenerator = new OAuth2AccessTokenGenerator();
+        OAuth2RefreshTokenGenerator defaultRefreshTokenGenerator = new OAuth2RefreshTokenGenerator();
+        PublicClientRefreshTokenGenerator refreshTokenGenerator =
+                new PublicClientRefreshTokenGenerator(defaultRefreshTokenGenerator);
+
+        return new DelegatingOAuth2TokenGenerator(
+                jwtGenerator, accessTokenGenerator, refreshTokenGenerator);
+    }
+
+    /**
      * Access tokens carry the stable central identity ID in the compatibility uid claim. First-party app
      * clients receive their own resource audience; Kanban MCP clients additionally receive the Kanban API
      * audience because the MCP service forwards the delegated token to that API. OIDC ID tokens carry scoped
