@@ -16,6 +16,7 @@ import org.springframework.security.oauth2.server.authorization.authentication.O
 import org.springframework.security.oauth2.server.authorization.authentication.OAuth2AuthorizationCodeRequestAuthenticationValidator;
 import org.springframework.security.oauth2.server.authorization.config.annotation.web.configuration.OAuth2AuthorizationServerConfiguration;
 import org.springframework.security.oauth2.server.authorization.config.annotation.web.configurers.OAuth2AuthorizationServerConfigurer;
+import org.springframework.security.oauth2.server.authorization.token.OAuth2TokenGenerator;
 import org.springframework.security.web.SecurityFilterChain;
 import org.springframework.security.web.authentication.LoginUrlAuthenticationEntryPoint;
 import org.springframework.security.web.util.matcher.AntPathRequestMatcher;
@@ -40,12 +41,14 @@ public class SecurityConfig {
     @SuppressWarnings("deprecation") // applyDefaultSecurity is deprecated since 1.4 but still supported
     public SecurityFilterChain authorizationServerSecurityFilterChain(
             HttpSecurity http, GeminiRedirectUriValidator geminiRedirectUriValidator,
+            OAuth2TokenGenerator<?> tokenGenerator,
             @org.springframework.beans.factory.annotation.Value("${auth.mcp.client-registration.enabled:false}") boolean mcpClientRegistrationEnabled,
             @org.springframework.beans.factory.annotation.Value("${auth.issuer}") String issuer) throws Exception {
         OAuth2AuthorizationServerConfiguration.applyDefaultSecurity(http);
 
         OAuth2AuthorizationServerConfigurer authorizationServerConfigurer =
                 http.getConfigurer(OAuth2AuthorizationServerConfigurer.class);
+        authorizationServerConfigurer.tokenGenerator(tokenGenerator);
         authorizationServerConfigurer.oidc(Customizer.withDefaults());
         if (mcpClientRegistrationEnabled) {
             authorizationServerConfigurer.authorizationServerMetadataEndpoint(endpoint ->
