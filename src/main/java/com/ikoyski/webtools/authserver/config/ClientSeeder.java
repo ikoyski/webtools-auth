@@ -32,6 +32,7 @@ public class ClientSeeder implements ApplicationRunner {
     public static final String GEMINI_DYNAMIC_REDIRECT_SETTING = "gemini.dynamic-redirect-uri";
     private static final String GEMINI_REDIRECT_URI_PLACEHOLDER =
             "https://oauth-redirect.googleusercontent.com/r/__dynamic_callback_placeholder__";
+    private static final Duration MCP_REFRESH_TOKEN_TTL = Duration.ofDays(30);
 
     private final RegisteredClientRepository clients;
     private final PasswordEncoder passwordEncoder;
@@ -123,13 +124,13 @@ public class ClientSeeder implements ApplicationRunner {
         seedWeb();
         seedConfiguredApplications();
         seedMcpClient(chatgptClientId, chatgptClientSecret, "ChatGPT MCP connector",
-                chatgptRedirectUris, false, false);
+                chatgptRedirectUris, false, false, false);
         // Gemini creates a per-user callback URL. Its exact URL is validated at authorization time.
         seedMcpClient(geminiClientId, geminiClientSecret, "Gemini MCP connector",
-                geminiRedirectUris, true, true);
+                geminiRedirectUris, true, true, false);
         // Antigravity uses a public OAuth client with PKCE for the Kanban MCP resource.
         seedMcpClient(kanbanAntigravityClientId, "", "Antigravity MCP connector",
-                kanbanAntigravityRedirectUris, false, false);
+                kanbanAntigravityRedirectUris, false, false, true);
         seedHomelabMcpClients();
     }
 
@@ -211,18 +212,20 @@ public class ClientSeeder implements ApplicationRunner {
         }
         boolean confidential = !isBlank(claudeClientSecret);
         if (!confidential) {
-            log.warn("auth.clients.kanban-claude.client-secret is not set: registering '{}' as a PUBLIC client. "
-                    + "Refresh tokens are disabled for MCP clients, so the connector must sign in again whenever its access token expires.",
+            log.info("Registering '{}' as a PUBLIC MCP client with PKCE and rotating refresh tokens",
                     claudeClientId);
         }
 
         RegisteredClient.Builder builder = base(claudeClientId, "Claude connector", uris)
+                .authorizationGrantType(AuthorizationGrantType.REFRESH_TOKEN)
                 .scope("kanban.read")
                 .scope("kanban.write")
                 .clientSettings(mcpClientSettings(true))
                 .tokenSettings(TokenSettings.builder()
                         .accessTokenFormat(OAuth2TokenFormat.SELF_CONTAINED)
                         .accessTokenTimeToLive(Duration.ofHours(1))
+                        .refreshTokenTimeToLive(MCP_REFRESH_TOKEN_TTL)
+                        .reuseRefreshTokens(false)
                         .build());
         if (confidential) {
             builder.clientSecret(passwordEncoder.encode(claudeClientSecret))
@@ -293,7 +296,8 @@ public class ClientSeeder implements ApplicationRunner {
     }
 
     private void seedMcpClient(String clientId, String clientSecret, String clientName, List<String> redirectUris,
-                               boolean allowEmptyRedirectUris, boolean geminiDynamicRedirect) {
+                               boolean allowEmptyRedirectUris, boolean geminiDynamicRedirect,
+                               boolean enableRefreshTokens) {
         List<String> uris = clean(redirectUris);
         if (isBlank(clientId) || (!allowEmptyRedirectUris && uris.isEmpty())) {
             return;
@@ -307,6 +311,10 @@ public class ClientSeeder implements ApplicationRunner {
         TokenSettings.Builder tokenSettings = TokenSettings.builder()
                 .accessTokenFormat(OAuth2TokenFormat.SELF_CONTAINED)
                 .accessTokenTimeToLive(Duration.ofHours(1));
+        if (enableRefreshTokens) {
+            tokenSettings.refreshTokenTimeToLive(MCP_REFRESH_TOKEN_TTL)
+                    .reuseRefreshTokens(false);
+        }
         // RegisteredClient requires at least one redirect URI for authorization_code clients.
         // This reserved placeholder is never accepted by GeminiRedirectUriValidator.
         List<String> registeredUris = uris.isEmpty() && geminiDynamicRedirect
@@ -316,6 +324,9 @@ public class ClientSeeder implements ApplicationRunner {
                 .scope("kanban.write")
                 .clientSettings(mcpClientSettings(true, geminiDynamicRedirect))
                 .tokenSettings(tokenSettings.build());
+        if (enableRefreshTokens) {
+            builder.authorizationGrantType(AuthorizationGrantType.REFRESH_TOKEN);
+        }
 
         if (confidential) {
             builder.clientSecret(passwordEncoder.encode(clientSecret))
