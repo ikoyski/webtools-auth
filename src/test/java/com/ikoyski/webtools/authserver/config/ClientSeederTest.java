@@ -95,6 +95,7 @@ class ClientSeederTest {
                         "https://pages.ikoyski.top/kanban/kanban.html")
                 .withProperty("auth.clients.kanban-chatgpt.redirect-uris[0]",
                         "https://chatgpt.com/connector_platform_oauth_redirect")
+                .withProperty("auth.clients.kanban-antigravity.redirect-uris[0]", ANTIGRAVITY_CALLBACK)
                 .withProperty("auth.clients.homelab-claude.redirect-uris[0]", CLAUDE_CALLBACK)
                 .withProperty("auth.clients.homelab-grok.redirect-uris[0]", GROK_CALLBACK)
                 .withProperty("auth.clients.homelab-antigravity.redirect-uris[0]", ANTIGRAVITY_CALLBACK);
@@ -110,6 +111,7 @@ class ClientSeederTest {
                 "https://api.ikoyski.top/kanban-backend",
                 "kanban-chatgpt", "",
                 "kanban-gemini", "",
+                "kanban-antigravity",
                 HOMELAB_RESOURCE,
                 "homelab-claude",
                 "homelab-gemini",
@@ -119,7 +121,7 @@ class ClientSeederTest {
         seeder.run(new DefaultApplicationArguments());
 
         ArgumentCaptor<RegisteredClient> captor = ArgumentCaptor.forClass(RegisteredClient.class);
-        verify(clients, times(8)).save(captor.capture());
+        verify(clients, times(9)).save(captor.capture());
         Map<String, RegisteredClient> registered = captor.getAllValues().stream()
                 .collect(Collectors.toMap(RegisteredClient::getClientId, Function.identity()));
 
@@ -129,6 +131,23 @@ class ClientSeederTest {
                 kanbanClaude.getClientSettings().getSetting(ClientSeeder.MCP_RESOURCE_SETTING));
         assertEquals("https://api.ikoyski.top/kanban-backend",
                 kanbanClaude.getClientSettings().getSetting(ClientSeeder.MCP_BACKEND_RESOURCE_SETTING));
+
+        RegisteredClient kanbanAntigravity = registered.get("kanban-antigravity");
+        assertEquals(Set.of("kanban.read", "kanban.write"), kanbanAntigravity.getScopes());
+        assertEquals(Set.of(ANTIGRAVITY_CALLBACK), kanbanAntigravity.getRedirectUris());
+        assertEquals(Set.of(AuthorizationGrantType.AUTHORIZATION_CODE),
+                kanbanAntigravity.getAuthorizationGrantTypes());
+        assertEquals(Set.of(ClientAuthenticationMethod.NONE),
+                kanbanAntigravity.getClientAuthenticationMethods());
+        assertNull(kanbanAntigravity.getClientSecret());
+        assertTrue(kanbanAntigravity.getClientSettings().isRequireProofKey());
+        assertTrue(kanbanAntigravity.getClientSettings().isRequireAuthorizationConsent());
+        assertEquals("https://api.ikoyski.top/kanban-mcp/mcp",
+                kanbanAntigravity.getClientSettings().getSetting(ClientSeeder.MCP_RESOURCE_SETTING));
+        assertEquals("https://api.ikoyski.top/kanban-backend",
+                kanbanAntigravity.getClientSettings().getSetting(ClientSeeder.MCP_BACKEND_RESOURCE_SETTING));
+        assertEquals(Duration.ofHours(1),
+                kanbanAntigravity.getTokenSettings().getAccessTokenTimeToLive());
 
         RegisteredClient kanbanWeb = registered.get("kanban-web");
         assertEquals(Set.of("openid", "profile", "email", "kanban.read", "kanban.write"),
@@ -161,6 +180,7 @@ class ClientSeederTest {
                 "", "",
                 "", "",
                 "", "",
+                "",
                 HOMELAB_RESOURCE,
                 "homelab-claude",
                 "homelab-gemini",
