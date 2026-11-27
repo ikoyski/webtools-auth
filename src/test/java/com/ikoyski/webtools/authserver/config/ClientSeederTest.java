@@ -127,6 +127,11 @@ class ClientSeederTest {
 
         RegisteredClient kanbanClaude = registered.get("kanban-claude");
         assertEquals(Set.of("kanban.read", "kanban.write"), kanbanClaude.getScopes());
+        assertEquals(Set.of(AuthorizationGrantType.AUTHORIZATION_CODE, AuthorizationGrantType.REFRESH_TOKEN),
+                kanbanClaude.getAuthorizationGrantTypes());
+        assertEquals(Duration.ofDays(30), kanbanClaude.getTokenSettings().getRefreshTokenTimeToLive());
+        assertFalse(kanbanClaude.getTokenSettings().isReuseRefreshTokens());
+        assertEquals(Duration.ofHours(1), kanbanClaude.getTokenSettings().getAccessTokenTimeToLive());
         assertEquals("https://api.ikoyski.top/kanban-mcp/mcp",
                 kanbanClaude.getClientSettings().getSetting(ClientSeeder.MCP_RESOURCE_SETTING));
         assertEquals("https://api.ikoyski.top/kanban-backend",
@@ -135,8 +140,10 @@ class ClientSeederTest {
         RegisteredClient kanbanAntigravity = registered.get("kanban-antigravity");
         assertEquals(Set.of("kanban.read", "kanban.write"), kanbanAntigravity.getScopes());
         assertEquals(Set.of(ANTIGRAVITY_CALLBACK), kanbanAntigravity.getRedirectUris());
-        assertEquals(Set.of(AuthorizationGrantType.AUTHORIZATION_CODE),
+        assertEquals(Set.of(AuthorizationGrantType.AUTHORIZATION_CODE, AuthorizationGrantType.REFRESH_TOKEN),
                 kanbanAntigravity.getAuthorizationGrantTypes());
+        assertEquals(Duration.ofDays(30), kanbanAntigravity.getTokenSettings().getRefreshTokenTimeToLive());
+        assertFalse(kanbanAntigravity.getTokenSettings().isReuseRefreshTokens());
         assertEquals(Set.of(ClientAuthenticationMethod.NONE),
                 kanbanAntigravity.getClientAuthenticationMethods());
         assertNull(kanbanAntigravity.getClientSecret());
@@ -148,6 +155,14 @@ class ClientSeederTest {
                 kanbanAntigravity.getClientSettings().getSetting(ClientSeeder.MCP_BACKEND_RESOURCE_SETTING));
         assertEquals(Duration.ofHours(1),
                 kanbanAntigravity.getTokenSettings().getAccessTokenTimeToLive());
+
+        RegisteredClient kanbanChatgpt = registered.get("kanban-chatgpt");
+        assertEquals(Set.of(AuthorizationGrantType.AUTHORIZATION_CODE),
+                kanbanChatgpt.getAuthorizationGrantTypes());
+
+        RegisteredClient kanbanGemini = registered.get("kanban-gemini");
+        assertEquals(Set.of(AuthorizationGrantType.AUTHORIZATION_CODE),
+                kanbanGemini.getAuthorizationGrantTypes());
 
         RegisteredClient kanbanWeb = registered.get("kanban-web");
         assertEquals(Set.of("openid", "profile", "email", "kanban.read", "kanban.write"),
