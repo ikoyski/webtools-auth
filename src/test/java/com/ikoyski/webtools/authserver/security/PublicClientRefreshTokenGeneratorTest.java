@@ -63,6 +63,7 @@ class PublicClientRefreshTokenGeneratorTest {
                 .clientId("confidential")
                 .clientAuthenticationMethod(ClientAuthenticationMethod.CLIENT_SECRET_BASIC)
                 .authorizationGrantType(AuthorizationGrantType.AUTHORIZATION_CODE)
+                .redirectUri("https://client.example/callback")
                 .authorizationGrantType(AuthorizationGrantType.REFRESH_TOKEN)
                 .tokenSettings(TokenSettings.builder().refreshTokenTimeToLive(Duration.ofDays(30)).build())
                 .build();
@@ -78,6 +79,7 @@ class PublicClientRefreshTokenGeneratorTest {
                 .clientId("public")
                 .clientAuthenticationMethod(ClientAuthenticationMethod.NONE)
                 .authorizationGrantType(AuthorizationGrantType.AUTHORIZATION_CODE)
+                .redirectUri("https://client.example/callback")
                 .clientSettings(ClientSettings.builder().requireProofKey(pkce).build())
                 .tokenSettings(TokenSettings.builder()
                         .refreshTokenTimeToLive(Duration.ofDays(30))
