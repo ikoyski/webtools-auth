@@ -48,8 +48,14 @@ public final class PublicClientRefreshTokenGenerator implements OAuth2TokenGener
 
         // Public clients must use PKCE for the authorization-code grant before refresh tokens
         // can be issued. This also prevents a misconfigured registration from opting in unsafely.
-        if (AuthorizationGrantType.AUTHORIZATION_CODE.equals(context.getAuthorizationGrantType())
-                && !client.getClientSettings().isRequireProofKey()) {
+        AuthorizationGrantType grantType = context.getAuthorizationGrantType();
+        if (AuthorizationGrantType.AUTHORIZATION_CODE.equals(grantType)) {
+            if (!client.getClientSettings().isRequireProofKey()) {
+                return null;
+            }
+        } else if (!AuthorizationGrantType.REFRESH_TOKEN.equals(grantType)) {
+            // Public refresh tokens are issued only from the PKCE authorization-code flow
+            // and rotated only when a valid refresh token is exchanged.
             return null;
         }
 
