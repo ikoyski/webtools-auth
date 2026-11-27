@@ -51,6 +51,8 @@ public class ClientSeeder implements ApplicationRunner {
     private final String geminiClientId;
     private final String geminiClientSecret;
     private final List<String> geminiRedirectUris;
+    private final String kanbanAntigravityClientId;
+    private final List<String> kanbanAntigravityRedirectUris;
     private final String homelabMcpResource;
     private final String homelabClaudeClientId;
     private final List<String> homelabClaudeRedirectUris;
@@ -76,6 +78,7 @@ public class ClientSeeder implements ApplicationRunner {
                         @Value("${auth.clients.kanban-chatgpt.client-secret:}") String chatgptClientSecret,
                         @Value("${auth.clients.kanban-gemini.client-id:}") String geminiClientId,
                         @Value("${auth.clients.kanban-gemini.client-secret:}") String geminiClientSecret,
+                        @Value("${auth.clients.kanban-antigravity.client-id:}") String kanbanAntigravityClientId,
                         @Value("${auth.resources.homelab-mcp.resource:}") String homelabMcpResource,
                         @Value("${auth.clients.homelab-claude.client-id:homelab-claude}") String homelabClaudeClientId,
                         @Value("${auth.clients.homelab-gemini.client-id:homelab-gemini}") String homelabGeminiClientId,
@@ -100,6 +103,9 @@ public class ClientSeeder implements ApplicationRunner {
         this.geminiClientId = geminiClientId;
         this.geminiClientSecret = geminiClientSecret;
         this.geminiRedirectUris = bindList(environment, "auth.clients.kanban-gemini.redirect-uris");
+        this.kanbanAntigravityClientId = kanbanAntigravityClientId;
+        this.kanbanAntigravityRedirectUris =
+                bindList(environment, "auth.clients.kanban-antigravity.redirect-uris");
         this.homelabMcpResource = homelabMcpResource == null ? "" : homelabMcpResource.trim();
         this.homelabClaudeClientId = homelabClaudeClientId;
         this.homelabClaudeRedirectUris = bindList(environment, "auth.clients.homelab-claude.redirect-uris");
@@ -121,6 +127,9 @@ public class ClientSeeder implements ApplicationRunner {
         // Gemini creates a per-user callback URL. Its exact URL is validated at authorization time.
         seedMcpClient(geminiClientId, geminiClientSecret, "Gemini MCP connector",
                 geminiRedirectUris, true, true);
+        // Antigravity uses a public OAuth client with PKCE for the Kanban MCP resource.
+        seedMcpClient(kanbanAntigravityClientId, "", "Antigravity MCP connector",
+                kanbanAntigravityRedirectUris, false, false);
         seedHomelabMcpClients();
     }
 
