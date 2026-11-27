@@ -40,6 +40,28 @@ class PublicClientRefreshTokenGeneratorTest {
     }
 
     @Test
+    void issuesReplacementRefreshTokenForRefreshGrant() {
+        RegisteredClient client = publicClient(true, true);
+        OAuth2TokenContext context = context(client, AuthorizationGrantType.REFRESH_TOKEN);
+
+        OAuth2RefreshToken replacement = generator.generate(context);
+
+        assertNotNull(replacement);
+        assertEquals(Duration.ofDays(30), Duration.between(replacement.getIssuedAt(), replacement.getExpiresAt()));
+        verifyNoInteractions(delegate);
+    }
+
+    @Test
+    void doesNotIssuePublicRefreshTokensForOtherGrantTypes() {
+        RegisteredClient client = publicClient(true, true);
+        OAuth2RefreshToken token = generator.generate(
+                context(client, new AuthorizationGrantType("urn:example:unsupported")));
+
+        assertNull(token);
+        verifyNoInteractions(delegate);
+    }
+
+    @Test
     void doesNotIssueRefreshTokensWhenPublicClientHasNotOptedIn() {
         OAuth2RefreshToken token = generator.generate(context(
                 publicClient(false, true), AuthorizationGrantType.AUTHORIZATION_CODE));
