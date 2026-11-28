@@ -1,6 +1,7 @@
 package com.ikoyski.webtools.authserver.security;
 
 import java.util.List;
+import java.util.Set;
 import java.util.function.Consumer;
 
 import org.springframework.context.annotation.Bean;
@@ -16,6 +17,7 @@ import org.springframework.security.oauth2.server.authorization.authentication.O
 import org.springframework.security.oauth2.server.authorization.authentication.OAuth2AuthorizationCodeRequestAuthenticationValidator;
 import org.springframework.security.oauth2.server.authorization.config.annotation.web.configuration.OAuth2AuthorizationServerConfiguration;
 import org.springframework.security.oauth2.server.authorization.config.annotation.web.configurers.OAuth2AuthorizationServerConfigurer;
+import org.springframework.security.oauth2.server.authorization.client.RegisteredClientRepository;
 import org.springframework.security.oauth2.server.authorization.token.OAuth2TokenGenerator;
 import org.springframework.security.web.SecurityFilterChain;
 import org.springframework.security.web.authentication.LoginUrlAuthenticationEntryPoint;
@@ -42,6 +44,7 @@ public class SecurityConfig {
     public SecurityFilterChain authorizationServerSecurityFilterChain(
             HttpSecurity http, GeminiRedirectUriValidator geminiRedirectUriValidator,
             OAuth2TokenGenerator<?> tokenGenerator,
+            RegisteredClientRepository registeredClientRepository,
             @org.springframework.beans.factory.annotation.Value("${auth.mcp.client-registration.enabled:false}") boolean mcpClientRegistrationEnabled,
             @org.springframework.beans.factory.annotation.Value("${auth.issuer}") String issuer) throws Exception {
         OAuth2AuthorizationServerConfiguration.applyDefaultSecurity(http);
@@ -49,6 +52,16 @@ public class SecurityConfig {
         OAuth2AuthorizationServerConfigurer authorizationServerConfigurer =
                 http.getConfigurer(OAuth2AuthorizationServerConfigurer.class);
         authorizationServerConfigurer.tokenGenerator(tokenGenerator);
+        authorizationServerConfigurer.clientAuthentication(clientAuthentication -> {
+            // Public clients cannot use a client secret. During refresh, authenticate the registered
+            // client_id without requiring the authorization-code-only PKCE code_verifier.
+            // Keep Spring's JWT, Basic, Post, PKCE and X.509 converters ahead of this fallback.
+            // The default PKCE converter intentionally does not match refresh grants.
+            clientAuthentication.authenticationConverters(converters ->
+                    converters.add(new PublicClientRefreshTokenAuthenticationConverter()));
+            clientAuthentication.authenticationProviders(providers ->
+                    providers.add(0, new PublicClientRefreshTokenAuthenticationProvider(registeredClientRepository)));
+        });
         authorizationServerConfigurer.oidc(Customizer.withDefaults());
         if (mcpClientRegistrationEnabled) {
             authorizationServerConfigurer.authorizationServerMetadataEndpoint(endpoint ->
@@ -63,9 +76,13 @@ public class SecurityConfig {
                 endpoint.authenticationProviders(configureAuthorizationCodeValidator(geminiRedirectUriValidator)));
 
         http.cors(Customizer.withDefaults());
+        MediaTypeRequestMatcher browserHtmlMatcher =
+                new MediaTypeRequestMatcher(MediaType.TEXT_HTML);
+        // Generic OAuth HTTP clients commonly send Accept: */*. Do not interpret that as
+        // a browser request and redirect protocol errors to the interactive HTML login page.
+        browserHtmlMatcher.setIgnoredMediaTypes(Set.of(MediaType.ALL));
         http.exceptionHandling(exceptions -> exceptions.defaultAuthenticationEntryPointFor(
-                new LoginUrlAuthenticationEntryPoint("/login"),
-                new MediaTypeRequestMatcher(MediaType.TEXT_HTML)));
+                new LoginUrlAuthenticationEntryPoint("/login"), browserHtmlMatcher));
         return http.build();
     }
 
