@@ -17,8 +17,8 @@ import org.springframework.security.oauth2.server.authorization.authentication.O
 import org.springframework.security.oauth2.server.authorization.authentication.OAuth2AuthorizationCodeRequestAuthenticationValidator;
 import org.springframework.security.oauth2.server.authorization.config.annotation.web.configuration.OAuth2AuthorizationServerConfiguration;
 import org.springframework.security.oauth2.server.authorization.config.annotation.web.configurers.OAuth2AuthorizationServerConfigurer;
-import org.springframework.security.oauth2.server.authorization.token.OAuth2TokenGenerator;
 import org.springframework.security.oauth2.server.authorization.client.RegisteredClientRepository;
+import org.springframework.security.oauth2.server.authorization.token.OAuth2TokenGenerator;
 import org.springframework.security.web.SecurityFilterChain;
 import org.springframework.security.web.authentication.LoginUrlAuthenticationEntryPoint;
 import org.springframework.security.web.util.matcher.AntPathRequestMatcher;
@@ -55,8 +55,10 @@ public class SecurityConfig {
         authorizationServerConfigurer.clientAuthentication(clientAuthentication -> {
             // Public clients cannot use a client secret. During refresh, authenticate the registered
             // client_id without requiring the authorization-code-only PKCE code_verifier.
+            // Keep Spring's JWT, Basic, Post, PKCE and X.509 converters ahead of this fallback.
+            // The default PKCE converter intentionally does not match refresh grants.
             clientAuthentication.authenticationConverters(converters ->
-                    converters.add(0, new PublicClientRefreshTokenAuthenticationConverter()));
+                    converters.add(new PublicClientRefreshTokenAuthenticationConverter()));
             clientAuthentication.authenticationProviders(providers ->
                     providers.add(0, new PublicClientRefreshTokenAuthenticationProvider(registeredClientRepository)));
         });
